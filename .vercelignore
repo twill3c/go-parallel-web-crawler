@@ -1,0 +1,9 @@
+tests/ui/out
+logs
+.wt
+.scaffold
+harness
+schema
+docs
+*.md
+!README.md
