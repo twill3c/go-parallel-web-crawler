@@ -28,7 +28,7 @@ context / sync.Mutex が実際のクロールでどう動いているか**をブ
 | F-05 | 同一 URL を二度取得しない。`URLSet`(`sync.Mutex` + map)で排他する | must | §12 |
 | F-06 | 同一ドメイン制限: 開始 URL のホストと一致するリンクだけを辿る(§2.3 の規則) | must | §15 |
 | F-07 | HTML を `net/http` で取得し、`<a href>` を抽出、相対 URL を絶対化する | must | §14, §15 |
-| F-08 | 非 HTML(Content-Type が text/html / application/xhtml+xml 以外)は解析せず「Non HTML」として記録 | must | §14, §22 |
+| F-08 | 非 HTML(Content-Type が text/html / application/xhtml+xml 以外)は解析せず「Non HTML」として記録。拡張子が明らかに非 HTML(画像・PDF・圧縮・動画・音声・CSS/JS/JSON/XML・フォント・実行形式・Office 文書。一覧は `fetcher.go` の `skipExtensions`)のリンクは**取得せずキューにも辺にも入れない**(実装 L2) | must | §14, §22 |
 | F-09 | STOP で `context` をキャンセルし、全 Worker が停止する | must | §13 |
 | F-10 | Max Pages に達したらそれ以上取得しない(取得数 ≤ Max Pages) | must | §4 |
 | F-11 | 各ページの status / 所要時間 / title / エラー種別を記録する | must | §10, §22 |
