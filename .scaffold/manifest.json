@@ -1,0 +1,84 @@
+{
+  "scaffold_version": "1.30.0",
+  "registry_hint": "harness-kit/scaffold-kit/registry",
+  "components": [
+    {
+      "type": "block",
+      "id": "agents_core",
+      "target": "AGENTS.md",
+      "source": "blocks/agents_core.md",
+      "installed_version": "1.30.0",
+      "installed_sha256": "58d0099a40ce81ac0830cfc16b566213c505ecf39755eb5153ae8d41194775c8"
+    },
+    {
+      "type": "file",
+      "id": "pr_template",
+      "target": ".github/PULL_REQUEST_TEMPLATE.md",
+      "source": "files/.github/PULL_REQUEST_TEMPLATE.md",
+      "installed_version": "1.30.0",
+      "installed_sha256": "a796725e0b3682bc02f12f614eaf88d96b0387a362c2e1b871cd85c5fb8a575d"
+    },
+    {
+      "type": "file",
+      "id": "looplog",
+      "target": "harness/looplog.py",
+      "source": "files/harness/looplog.py",
+      "installed_version": "1.30.0",
+      "installed_sha256": "de9d782625f6551e6a91a4e16788b3189d3d4577c973782be2dfee55dda91b96"
+    },
+    {
+      "type": "file",
+      "id": "wtctl",
+      "target": "harness/wtctl.py",
+      "source": "files/harness/wtctl.py",
+      "installed_version": "1.30.0",
+      "installed_sha256": "e428c8e1e86aeab2d7bae189d45f4379505a86e713c7fd07b48dc84280f206c5"
+    },
+    {
+      "type": "file",
+      "id": "text_hygiene",
+      "target": "harness/text_hygiene.py",
+      "source": "files/harness/text_hygiene.py",
+      "installed_version": "1.30.0",
+      "installed_sha256": "132c5a28c51bae8ab56cc1babe86cca7fc6d741f54ba6ea75ce8b332d6a0d4d0"
+    },
+    {
+      "type": "file",
+      "id": "taxonomy",
+      "target": "schema/taxonomy.json",
+      "source": "files/schema/taxonomy.json",
+      "installed_version": "1.30.0",
+      "installed_sha256": "60b6ba3f4e7abb3db6b6f879c1430fcf3e6e122af72253f937a468e72d968e18"
+    },
+    {
+      "type": "file",
+      "id": "license",
+      "target": "LICENSE",
+      "source": "files/LICENSE",
+      "installed_version": "1.30.0",
+      "installed_sha256": "99894d70d7f745bb66c65bb61520c29daf4e33f2649abd7190aee301932c610e"
+    },
+    {
+      "type": "template",
+      "id": "spec_skeleton",
+      "target": "SPEC.md",
+      "source": "templates/SPEC.md.tmpl",
+      "installed_version": "1.30.0"
+    },
+    {
+      "type": "template",
+      "id": "test_spec_skeleton",
+      "target": "TEST_SPEC.md",
+      "source": "templates/TEST_SPEC.md.tmpl",
+      "installed_version": "1.30.0"
+    },
+    {
+      "type": "template",
+      "id": "wt_gate",
+      "target": ".wt/gate.json",
+      "source": "templates/gate.json.tmpl",
+      "installed_version": "1.30.0"
+    }
+  ],
+  "profiles": []
+}
