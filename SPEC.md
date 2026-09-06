@@ -154,7 +154,7 @@ type Statistics struct {
 | `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt}` |
 | `worker_started` | `{workerId, url, t}`(t = 開始からの ms) |
 | `page_completed` | `{workerId, url, statusCode, durationMs, title, error?, t}` |
-| `link_found` | `{from, to, t}`(同一ドメイン・未知の URL のみ。キューに入ったことを意味する) |
+| `link_found` | `{from, to, queued, t}`(同一ドメインの**一意な辺**すべて。`queued` が true なら `to` がこのとき URLSet に入りキューへ送られた。既知の URL・上限で入らなかった URL への辺は false。**辺の集合は結果の `links` と一致し**、画面はこれでリンク構造(閉路・上限で切られた先)を描く — L4 で改訂) |
 | `worker_done` | `{workerId, pages, t}`(goroutine が抜けた) |
 | `crawl_completed` | `{reason: "exhausted" \| "max_pages" \| "cancelled" \| "deadline", statistics, t}` |
 

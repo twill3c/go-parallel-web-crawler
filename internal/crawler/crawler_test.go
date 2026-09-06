@@ -247,6 +247,7 @@ func TestRun_LinksUnique(t *testing.T) {
 	events, res := run(t, context.Background(), s, Config{Workers: 2, MaxPages: 100})
 	base := strings.TrimSuffix(res.Pages[0].URL, "/")
 	seen := map[[2]string]bool{}
+	queuedTo := map[string]int{}
 	for _, e := range events {
 		if e.Type != model.EvLinkFound {
 			continue
@@ -259,12 +260,23 @@ func TestRun_LinksUnique(t *testing.T) {
 			t.Errorf("重複した辺: %v", k)
 		}
 		seen[k] = true
+		if e.Queued {
+			queuedTo[e.To]++
+		}
 	}
-	// link_found は「未知の URL がキューに入った」印なので、各 to は一度だけ現れる(BFS の木)。
-	// 一方 res.Links はページ間の全辺(閉路・重複を潰したもの)で、サイトの辺集合と一致する。
+	// queued=true の辺は「未知の URL がキューに入った」印なので、各 to について一度だけ(BFS の木)
+	for to, n := range queuedTo {
+		if n != 1 {
+			t.Errorf("%s が %d 回キューに入った", to, n)
+		}
+	}
+	// イベントの辺集合 = res.Links = サイトの辺集合(閉路・重複を潰したもの)
 	got := map[[2]string]bool{}
 	for _, l := range res.Links {
 		got[[2]string{strings.TrimPrefix(l.From, base), strings.TrimPrefix(l.To, base)}] = true
+	}
+	if len(got) != len(seen) {
+		t.Errorf("res.Links %d 本と link_found %d 本が食い違う", len(got), len(seen))
 	}
 	want := s.edges()
 	for k := range want {

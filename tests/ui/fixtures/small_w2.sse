@@ -1,0 +1,84 @@
+event: crawl_started
+data: {"type":"crawl_started","t":0,"crawlId":"a65f16e856b11ca48cf71b02","workers":2,"maxPages":10,"startedAt":"2026-09-06T10:50:56.0187569Z","url":"http://127.0.0.1:53192/"}
+
+event: worker_started
+data: {"type":"worker_started","t":0,"workerId":2,"url":"http://127.0.0.1:53192/"}
+
+event: page_completed
+data: {"type":"page_completed","t":1,"workerId":2,"url":"http://127.0.0.1:53192/","statusCode":200,"durationMs":1,"title":"root"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53192/","to":"http://127.0.0.1:53192/p1","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53192/","to":"http://127.0.0.1:53192/p2","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53192/","to":"http://127.0.0.1:53192/p3","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53192/","to":"http://127.0.0.1:53192/p4","queued":true}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":2,"url":"http://127.0.0.1:53192/p2"}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":1,"url":"http://127.0.0.1:53192/p1"}
+
+event: page_completed
+data: {"type":"page_completed","t":2,"workerId":2,"url":"http://127.0.0.1:53192/p2","statusCode":200,"title":"/p2"}
+
+event: worker_started
+data: {"type":"worker_started","t":2,"workerId":2,"url":"http://127.0.0.1:53192/p3"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p2","to":"http://127.0.0.1:53192/"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p2","to":"http://127.0.0.1:53192/missing","queued":true}
+
+event: page_completed
+data: {"type":"page_completed","t":2,"workerId":1,"url":"http://127.0.0.1:53192/p1","statusCode":200,"title":"/p1"}
+
+event: worker_started
+data: {"type":"worker_started","t":2,"workerId":1,"url":"http://127.0.0.1:53192/p4"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p1","to":"http://127.0.0.1:53192/"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p1","to":"http://127.0.0.1:53192/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":2,"workerId":1,"url":"http://127.0.0.1:53192/p4","statusCode":200,"title":"/p4"}
+
+event: worker_started
+data: {"type":"worker_started","t":2,"workerId":1,"url":"http://127.0.0.1:53192/missing"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p4","to":"http://127.0.0.1:53192/"}
+
+event: link_found
+data: {"type":"link_found","t":2,"from":"http://127.0.0.1:53192/p4","to":"http://127.0.0.1:53192/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":3,"workerId":2,"url":"http://127.0.0.1:53192/p3","statusCode":200,"durationMs":1,"title":"/p3"}
+
+event: link_found
+data: {"type":"link_found","t":3,"from":"http://127.0.0.1:53192/p3","to":"http://127.0.0.1:53192/"}
+
+event: link_found
+data: {"type":"link_found","t":3,"from":"http://127.0.0.1:53192/p3","to":"http://127.0.0.1:53192/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":3,"workerId":1,"url":"http://127.0.0.1:53192/missing","statusCode":404,"durationMs":1,"error":"HTTP 404"}
+
+event: worker_done
+data: {"type":"worker_done","t":3,"workerId":2,"pages":3}
+
+event: worker_done
+data: {"type":"worker_done","t":3,"workerId":1,"pages":3}
+
+event: crawl_completed
+data: {"type":"crawl_completed","t":3,"reason":"exhausted","statistics":{"total":6,"success":5,"errors":1,"durationMs":3,"requestsPerSec":2000,"avgMs":0,"p95Ms":1}}
+

@@ -127,19 +127,23 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 				continue
 			}
 			e := model.Link{From: r.page.URL, To: l}
-			if !edgeSeen[e] {
-				edgeSeen[e] = true
-				links = append(links, e)
+			if edgeSeen[e] {
+				continue // 同じ辺は一度だけ(G-12)
 			}
-			if seen.Has(l) {
-				continue
+			edgeSeen[e] = true
+			links = append(links, e)
+			// キューに入れるのは未知の URL だけ。上限に達していれば入れない(D-06)
+			queued := false
+			if !seen.Has(l) {
+				if seen.Len() >= cfg.MaxPages {
+					capped = true
+				} else if seen.Add(l) {
+					queued = true
+				}
 			}
-			if seen.Len() >= cfg.MaxPages {
-				capped = true
-				continue
-			}
-			if seen.Add(l) {
-				events <- model.Event{Type: model.EvLinkFound, T: clock(), From: r.page.URL, To: l}
+			// 辺は queued でなくても流す — 画面はリンク構造(閉路・上限で切られた先)も描く(F-34)
+			events <- model.Event{Type: model.EvLinkFound, T: clock(), From: r.page.URL, To: l, Queued: queued}
+			if queued {
 				jobs <- l
 				inflight++
 			}

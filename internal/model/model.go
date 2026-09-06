@@ -70,8 +70,9 @@ type Event struct {
 	Pages      int    `json:"pages,omitempty"`
 
 	// link_found
-	From string `json:"from,omitempty"`
-	To   string `json:"to,omitempty"`
+	From   string `json:"from,omitempty"`
+	To     string `json:"to,omitempty"`
+	Queued bool   `json:"queued,omitempty"` // この辺の先がキューに入ったか(既知・上限超過なら false)
 
 	// crawl_completed
 	Reason     string      `json:"reason,omitempty"`

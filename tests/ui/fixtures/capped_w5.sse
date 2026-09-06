@@ -1,0 +1,279 @@
+event: crawl_started
+data: {"type":"crawl_started","t":0,"crawlId":"72c5d92bc23eea2beaef9923","workers":5,"maxPages":12,"startedAt":"2026-09-06T10:50:56.0291259Z","url":"http://127.0.0.1:53198/"}
+
+event: worker_started
+data: {"type":"worker_started","t":0,"workerId":2,"url":"http://127.0.0.1:53198/"}
+
+event: page_completed
+data: {"type":"page_completed","t":1,"workerId":2,"url":"http://127.0.0.1:53198/","statusCode":200,"durationMs":1,"title":"root"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p1","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p2","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p3","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p4","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p5","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p6","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p7","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p8","queued":true}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":3,"url":"http://127.0.0.1:53198/p2"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p9","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p10","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p11","queued":true}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p12"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p13"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p14"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p15"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p16"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p17"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p18"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p19"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p20"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p21"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p22"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p23"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p24"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p25"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p26"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p27"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p28"}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":1,"url":"http://127.0.0.1:53198/p1"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p29"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p30"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p31"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p32"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p33"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p34"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p35"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p36"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p37"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p38"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p39"}
+
+event: link_found
+data: {"type":"link_found","t":1,"from":"http://127.0.0.1:53198/","to":"http://127.0.0.1:53198/p40"}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":2,"url":"http://127.0.0.1:53198/p5"}
+
+event: worker_started
+data: {"type":"worker_started","t":1,"workerId":4,"url":"http://127.0.0.1:53198/p3"}
+
+event: worker_started
+data: {"type":"worker_started","t":2,"workerId":5,"url":"http://127.0.0.1:53198/p4"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":3,"url":"http://127.0.0.1:53198/p2","statusCode":200,"durationMs":3,"title":"/p2"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":3,"url":"http://127.0.0.1:53198/p6"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":1,"url":"http://127.0.0.1:53198/p1","statusCode":200,"durationMs":2,"title":"/p1"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":2,"url":"http://127.0.0.1:53198/p5","statusCode":200,"durationMs":2,"title":"/p5"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p2","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p2","to":"http://127.0.0.1:53198/missing"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p1","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p1","to":"http://127.0.0.1:53198/missing"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p5","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p5","to":"http://127.0.0.1:53198/missing"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":2,"url":"http://127.0.0.1:53198/p7"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":3,"url":"http://127.0.0.1:53198/p6","statusCode":200,"title":"/p6"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":3,"url":"http://127.0.0.1:53198/p8"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":4,"url":"http://127.0.0.1:53198/p3","statusCode":200,"durationMs":3,"title":"/p3"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":5,"url":"http://127.0.0.1:53198/p4","statusCode":200,"durationMs":2,"title":"/p4"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p6","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p6","to":"http://127.0.0.1:53198/missing"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p3","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p3","to":"http://127.0.0.1:53198/missing"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p4","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p4","to":"http://127.0.0.1:53198/missing"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":5,"url":"http://127.0.0.1:53198/p9"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":2,"url":"http://127.0.0.1:53198/p7","statusCode":200,"title":"/p7"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":2,"url":"http://127.0.0.1:53198/p10"}
+
+event: worker_started
+data: {"type":"worker_started","t":4,"workerId":4,"url":"http://127.0.0.1:53198/p11"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p7","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p7","to":"http://127.0.0.1:53198/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":3,"url":"http://127.0.0.1:53198/p8","statusCode":200,"title":"/p8"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p8","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p8","to":"http://127.0.0.1:53198/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":4,"url":"http://127.0.0.1:53198/p11","statusCode":200,"title":"/p11"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p11","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p11","to":"http://127.0.0.1:53198/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":4,"workerId":5,"url":"http://127.0.0.1:53198/p9","statusCode":200,"title":"/p9"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p9","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":4,"from":"http://127.0.0.1:53198/p9","to":"http://127.0.0.1:53198/missing"}
+
+event: page_completed
+data: {"type":"page_completed","t":5,"workerId":2,"url":"http://127.0.0.1:53198/p10","statusCode":200,"title":"/p10"}
+
+event: link_found
+data: {"type":"link_found","t":5,"from":"http://127.0.0.1:53198/p10","to":"http://127.0.0.1:53198/"}
+
+event: link_found
+data: {"type":"link_found","t":5,"from":"http://127.0.0.1:53198/p10","to":"http://127.0.0.1:53198/missing"}
+
+event: worker_done
+data: {"type":"worker_done","t":5,"workerId":3,"pages":3}
+
+event: worker_done
+data: {"type":"worker_done","t":5,"workerId":2,"pages":4}
+
+event: worker_done
+data: {"type":"worker_done","t":5,"workerId":5,"pages":2}
+
+event: worker_done
+data: {"type":"worker_done","t":5,"workerId":1,"pages":1}
+
+event: worker_done
+data: {"type":"worker_done","t":5,"workerId":4,"pages":2}
+
+event: crawl_completed
+data: {"type":"crawl_completed","t":5,"reason":"max_pages","statistics":{"total":12,"success":12,"errors":0,"durationMs":5,"requestsPerSec":2400,"avgMs":1,"p95Ms":3}}
+

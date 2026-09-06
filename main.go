@@ -13,8 +13,15 @@ import (
 )
 
 func main() {
+	s := api.NewServer()
+	// 実ブラウザ検品(tests/ui/browser.test.mjs)のためだけのフラグ。ローカルの合成サイト(127.0.0.1)を
+	// クロールさせるために SSRF 検査を外す。本番の環境変数には決して置かない(SPEC §2.4)。
+	if os.Getenv("GPWC_ALLOW_PRIVATE") == "1" {
+		s.AllowPrivate = true
+		log.Printf("WARNING: GPWC_ALLOW_PRIVATE=1 — SSRF checks are disabled (test only)")
+	}
 	mux := http.NewServeMux()
-	api.Register(mux)
+	s.Register(mux)
 	mux.Handle("/", http.FileServer(http.Dir("public")))
 
 	port := os.Getenv("PORT")

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Go Parallel Web Crawler</title>
+<meta name="description" content="Go の goroutine / channel / Worker Pool / context によるWebクロールの並行処理を、ブラウザで目で見る学習用アプリ。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2300add8'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%230b1220'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <h1>Go Parallel Web Crawler</h1>
+  <p class="tagline">See Go concurrency in action.</p>
+  <p class="lede">URL をひとつ渡すと、そのサイトの中を幅優先で巡回します。見どころはクロール結果ではなく、
+    <strong>goroutine で動く Worker が今なにをしているか</strong>、<strong>channel に何件が溜まっているか</strong>、
+    <strong>STOP で context が全 Worker に届くか</strong>です。</p>
+</header>
+
+<main>
+  <section class="panel controls" aria-labelledby="controls-h">
+    <h2 id="controls-h" class="visually-hidden">クロールの設定</h2>
+    <form id="form" autocomplete="off">
+      <label class="field url-field">
+        <span class="label">Target URL</span>
+        <input id="url" name="url" type="url" required placeholder="https://example.com" inputmode="url" spellcheck="false">
+      </label>
+      <label class="field">
+        <span class="label">Workers <output id="workersOut" for="workers">5</output></span>
+        <input id="workers" name="workers" type="range" min="1" max="20" value="5">
+        <span class="hint">goroutine の本数(1〜20)</span>
+      </label>
+      <label class="field">
+        <span class="label">Max Pages <output id="maxPagesOut" for="maxPages">50</output></span>
+        <input id="maxPages" name="maxPages" type="range" min="1" max="100" value="50">
+        <span class="hint">取得するページ数の上限(1〜100)</span>
+      </label>
+      <label class="field">
+        <span class="label">Request Delay</span>
+        <span class="inline"><input id="delay" name="delay" type="number" min="0" max="5000" step="50" value="200"> <span class="unit">ms</span></span>
+        <span class="hint">各 Worker が取得前に待つ時間(0〜5000)</span>
+      </label>
+      <div class="actions">
+        <button id="start" type="submit" class="primary">START CRAWL</button>
+        <button id="stop" type="button" class="danger" disabled>STOP</button>
+        <span id="status" class="status" data-status="idle">idle</span>
+      </div>
+    </form>
+    <p class="notice" role="note">自分が管理するサイト、またはクロールが許可されているサイトで利用してください。
+      学習・デモ用の小規模クローラです(Workers ≤ 20・Max Pages ≤ 100・1 回 ≤ 60 秒・同一ドメインのみ・robots.txt は読みません)。</p>
+    <p id="message" class="message" hidden></p>
+  </section>
+
+  <section class="panel pipeline" aria-labelledby="pipeline-h">
+    <h2 id="pipeline-h">Channel の中身</h2>
+    <div class="pipe">
+      <div class="pipe-box">
+        <span class="pipe-name">jobs channel</span>
+        <span class="pipe-num" id="pipeQueued">0</span>
+        <span class="pipe-sub">キュー待ち</span>
+      </div>
+      <span class="pipe-arrow" aria-hidden="true">→</span>
+      <div class="pipe-box">
+        <span class="pipe-name">Worker Pool</span>
+        <span class="pipe-num" id="pipeCrawling">0</span>
+        <span class="pipe-sub">取得中 / <span id="pipeWorkers">0</span> goroutine</span>
+      </div>
+      <span class="pipe-arrow" aria-hidden="true">→</span>
+      <div class="pipe-box">
+        <span class="pipe-name">results channel</span>
+        <span class="pipe-num" id="pipeDone">0</span>
+        <span class="pipe-sub">集約済み</span>
+      </div>
+      <span class="pipe-arrow" aria-hidden="true">→</span>
+      <div class="pipe-box">
+        <span class="pipe-name">URLSet (Mutex)</span>
+        <span class="pipe-num" id="pipeDiscovered">0</span>
+        <span class="pipe-sub">既知の URL</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel graph-panel" aria-labelledby="graph-h">
+      <h2 id="graph-h">Crawl Graph</h2>
+      <p class="legend">
+        <span class="lg"><i class="dot fetched"></i>取得済み</span>
+        <span class="lg"><i class="dot error"></i>エラー</span>
+        <span class="lg"><i class="dot pending"></i>発見(未取得)</span>
+        <span class="lg"><i class="dot crawling"></i>取得中</span>
+      </p>
+      <svg id="graph" viewBox="0 0 640 480" role="img" aria-label="ページをノード、リンクを辺としたグラフ"></svg>
+      <p class="graph-empty" id="graphEmpty">URL を入れて START を押すと、ここにリンク構造が育ちます。</p>
+    </section>
+
+    <section class="panel workers-panel" aria-labelledby="workers-h">
+      <h2 id="workers-h">Workers</h2>
+      <p class="hint">○ Waiting ・ ● Crawling ・ ! Error ・ ✓ Completed</p>
+      <ol id="workerList" class="worker-list"></ol>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="stats-h">
+    <h2 id="stats-h">Statistics</h2>
+    <dl class="stats" id="stats">
+      <div><dt>Pages</dt><dd id="stPages">0</dd></div>
+      <div><dt>Links</dt><dd id="stLinks">0</dd></div>
+      <div><dt>Success</dt><dd id="stSuccess">0</dd></div>
+      <div><dt>Errors</dt><dd id="stErrors">0</dd></div>
+      <div><dt>Elapsed</dt><dd id="stElapsed">0.00s</dd></div>
+      <div><dt>Requests/sec</dt><dd id="stRps">0</dd></div>
+      <div><dt>Avg</dt><dd id="stAvg">0ms</dd></div>
+      <div><dt>P95</dt><dd id="stP95">0ms</dd></div>
+    </dl>
+    <p class="hint" id="reason"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="errors-h">
+    <h2 id="errors-h">Errors <span class="count" id="errCount">0</span></h2>
+    <ul id="errors" class="errors"></ul>
+  </section>
+
+  <section class="panel" aria-labelledby="pages-h">
+    <h2 id="pages-h">Page Results</h2>
+    <div class="table-wrap">
+      <table class="pages" id="pagesTable">
+        <thead><tr><th>#</th><th>URL</th><th>Status</th><th>Time</th><th>Worker</th><th>Title / Error</th></tr></thead>
+        <tbody id="pages"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="fleet-footer">
+  <a href="https://github.com/twill3c/go-parallel-web-crawler/blob/main/LICENSE">MIT License</a> © 2026 坂田哲朗
+  <span class="sep"> ・ </span><a href="https://github.com/twill3c/go-parallel-web-crawler">GitHub</a>
+  <span class="sep"> ・ </span><a id="linkHowto" href="https://github.com/twill3c/go-parallel-web-crawler#readme">Go Parallel Web Crawler の見方</a>
+  <span class="sep"> ・ </span><a id="linkDesign" href="https://github.com/twill3c/go-parallel-web-crawler/blob/main/SPEC.md">設計図</a>
+  <span class="sep"> ・ </span><a href="https://app-menu-amber.vercel.app/">App Menu</a>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
