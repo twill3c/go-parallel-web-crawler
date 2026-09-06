@@ -193,8 +193,10 @@ func ComputeStatistics(pages []model.Page, elapsed time.Duration) model.Statisti
 		idx = 0
 	}
 	st.P95Ms = durs[idx]
-	if sec := elapsed.Seconds(); sec > 0 {
-		st.RequestsPerSec = math.Round(float64(st.Total)/sec*10) / 10
+	// SPEC §5: total / (durationMs / 1000)。画面・テストが同じ式で再計算できるよう、
+	// ミリ秒に丸めた後の DurationMs から出す(生の経過時間から出すと最下位桁が食い違う)
+	if st.DurationMs > 0 {
+		st.RequestsPerSec = math.Round(float64(st.Total)/(float64(st.DurationMs)/1000)*10) / 10
 	}
 	return st
 }
