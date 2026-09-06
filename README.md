@@ -34,14 +34,16 @@ AI コーディングエージェント向けの参照資料は次の四つ(原�
 | URL parsing | `urlnorm.go` / `parser.go`: 正規化(冪等)・相対参照の解決 |
 | concurrent processing | 応答を遅らせた合成サイトで、同時接続数の最大 = Workers を実測(T-203) |
 | performance measurement | Elapsed / Requests/sec / Avg / P95。イベント列から再計算して一致(G-08) |
+| Worker Pool の効き方 | BENCHMARK ボタン。Workers 1/2/5/10 を順に走らせて Pages/s を並べる。**速すぎる計測では数を出さない**(下限 500ms)|
 
 ## 動かす
 
 ```bash
 go run .                                 # http://localhost:3000
 go test -race ./...                      # Go のテスト(ネットワークに出ない)
-node --test tests/ui/reducer.test.mjs    # 画面の reducer(実録 SSE フィクスチャ)
-node --test tests/ui/browser.test.mjs    # 実ブラウザ検品(Playwright を PLAYWRIGHT_DIR から借りる)
+node --test tests/ui/*.test.mjs          # 画面(reducer・ベンチ集計・実ブラウザ検品)
+                                         # ※ ディレクトリ指定は Node 24.3 で落ちる。ファイルを渡す
+                                         # ※ Playwright は PLAYWRIGHT_DIR(既定 ../hacchu-forge/node_modules/playwright)から借りる
 node scripts/probe_stream.mjs https://go-parallel-web-crawler.vercel.app https://<対象>/  # 本番の SSE を測る
 ```
 
@@ -84,7 +86,11 @@ scripts/             本番の SSE 計測
 - **統計の独立再計算が最初の実行で食い違いを捕まえた。** Requests/sec を生の経過時間から出していたが、
   イベント列には ms に丸めた `durationMs` しか無く、再計算は原理的に一致しなかった(HC-189)
 - **`hidden` 属性は `display` を持つ CSS に負ける。** 要素数・幾何・溢れの検査は全部緑のまま、
-  スクリーンショットの目視でだけ見つかった(HC-190)
+  スクリーンショットの目視でだけ見つかった(HC-193)
+- **ベンチマークは速すぎると何も測れない。** ローカルの合成サイト(1 回 20〜50 ms)では
+  Workers 1 が 444 pages/s、5 が 750、10 が 267 と単調ですらない値が出た。差は並行度ではなく
+  往復のばらつきである。各行 500 ms 未満なら速度比も最速の印も出さず、手当てを書く(G-13)。
+  応答を 300 ms 遅らせた同じサイトでは 3.2 → 12.4 pages/s(×3.9)と単調に伸びる
 
 ## License
 

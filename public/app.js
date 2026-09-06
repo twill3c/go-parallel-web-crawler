@@ -1,5 +1,8 @@
 // app.js — DOM と通信。状態の更新は state.js の reduce に任せ、ここは描画と fetch だけを持つ。
-import { createSSEParser, initialState, reduce, liveStats, channelCounts, STATUS, WORKER } from './state.js';
+import {
+  createSSEParser, initialState, reduce, liveStats, channelCounts, STATUS, WORKER,
+  BENCH_WORKERS, benchRow, benchSummary, MIN_BENCH_MS,
+} from './state.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -12,12 +15,17 @@ const els = {
   stPages: $('stPages'), stLinks: $('stLinks'), stSuccess: $('stSuccess'), stErrors: $('stErrors'),
   stElapsed: $('stElapsed'), stRps: $('stRps'), stAvg: $('stAvg'), stP95: $('stP95'), reason: $('reason'),
   errors: $('errors'), errCount: $('errCount'), pages: $('pages'),
+  bench: $('bench'), benchPanel: $('benchPanel'), benchBody: $('benchBody'), benchNote: $('benchNote'), benchVerdict: $('benchVerdict'),
 };
 
 let state = initialState();
 let controller = null; // AbortController(STOP の第二経路)
 let startedAtLocal = 0;
 let uiStatus = STATUS.IDLE; // stopping は画面側だけの状態
+// ベンチマーク(F-38)の進行状況。setStatus が読むので、他の状態と一緒にここで宣言する
+let benchRunning = false;
+let benchAt = 0;
+let benchRows = [];
 let raf = 0;
 let dirty = true;
 
@@ -34,10 +42,11 @@ els.stop.addEventListener('click', () => stopCrawl());
 function setStatus(s) {
   uiStatus = s;
   els.status.dataset.status = s;
-  els.status.textContent = s;
+  els.status.textContent = benchRunning ? `benchmark ${benchAt}/${BENCH_WORKERS.length}` : s;
   const running = s === STATUS.RUNNING || s === STATUS.STOPPING;
   els.start.disabled = running;
   els.stop.disabled = s !== STATUS.RUNNING;
+  els.bench.disabled = running;
   for (const el of [els.url, els.workers, els.maxPages, els.delay]) el.disabled = running;
 }
 
@@ -47,13 +56,14 @@ function showMessage(text) {
 }
 
 // ---------- 通信 ----------
-async function startCrawl() {
+async function startCrawl(override) {
   showMessage('');
   const body = {
     url: els.url.value.trim(),
     workers: Number(els.workers.value),
     maxPages: Number(els.maxPages.value),
     requestDelayMs: Number(els.delay.value),
+    ...override,
   };
   state = initialState();
   graph.reset();
@@ -104,6 +114,7 @@ async function startCrawl() {
     controller = null;
     render();
   }
+  return { stats: state.stats, reason: state.reason, ok: uiStatus === STATUS.COMPLETED };
 }
 
 function onEvent(e) {
@@ -130,6 +141,114 @@ async function stopCrawl() {
     await new Promise((r) => setTimeout(r, 50));
   }
   if (state.status !== STATUS.COMPLETED && controller) controller.abort();
+}
+
+// ---------- ベンチマーク(F-38)----------
+els.bench.addEventListener('click', () => runBenchmark());
+
+async function runBenchmark() {
+  if (benchRunning || uiStatus === STATUS.RUNNING) return;
+  const url = els.url.value.trim();
+  if (!url) { showMessage('Target URL を入れてください'); return; }
+  // 対象サイトへのアクセスは BENCH_WORKERS の本数だけ繰り返される。上限を絞ってから確認を取る
+  const maxPages = Math.min(Number(els.maxPages.value), 30);
+  const times = BENCH_WORKERS.length;
+  const ok = window.confirm(
+    `${url} を Workers=${BENCH_WORKERS.join(' / ')} で ${times} 回クロールします。`
+    + `\n1 回あたり最大 ${maxPages} ページなので、対象サイトへのアクセスは最大 ${maxPages * times} 回です。`
+    + '\n自分が管理するサイト、またはクロールが許可されているサイトですか?');
+  if (!ok) return;
+
+  benchRunning = true;
+  benchRows = [];
+  benchAt = 0;
+  els.benchPanel.hidden = false;
+  renderBench();
+  for (const workers of BENCH_WORKERS) {
+    benchAt += 1;
+    renderBench();
+    const res = await startCrawl({ workers, maxPages });
+    if (!res.ok || !res.stats) {
+      // 途中で失敗・中断したらそこで止める(半端な行を比較に混ぜない)
+      break;
+    }
+    benchRows.push(benchRow(workers, res.stats, res.reason));
+    renderBench();
+  }
+  benchRunning = false;
+  benchAt = 0;
+  setStatus(uiStatus);
+  renderBench();
+}
+
+function renderBench() {
+  const s = benchSummary(benchRows);
+  els.benchBody.textContent = '';
+  const done = new Set(benchRows.map((r) => r.workers));
+  BENCH_WORKERS.forEach((w, i) => {
+    const row = benchRows.find((r) => r.workers === w);
+    const tr = document.createElement('tr');
+    if (!row) {
+      tr.className = 'pending';
+      const running = benchRunning && benchAt === i + 1;
+      const cells = [`${w}`, running ? '計測中…' : (done.size ? '—' : '待機'), '—', '', '—', '—', '—'];
+      for (const text of cells) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      els.benchBody.appendChild(tr);
+      return;
+    }
+    if (s.trustworthy && row.workers === s.fastest.workers) tr.className = 'best';
+    const tds = [
+      `${row.workers}`,
+      `${row.seconds.toFixed(2)}s`,
+      `${row.pagesPerSec}`,
+      null, // 棒
+      s.trustworthy ? `×${s.speedup(row)}` : '—',
+      `${row.pages}${row.errors ? ` (err ${row.errors})` : ''}`,
+      `${row.p95Ms}ms`,
+    ];
+    for (const text of tds) {
+      const td = document.createElement('td');
+      if (text === null) {
+        td.className = 'barcell';
+        const bar = document.createElement('span');
+        bar.className = 'bar';
+        bar.style.width = `${Math.max(2, s.bar(row) * 100)}%`;
+        td.appendChild(bar);
+      } else {
+        td.textContent = text;
+      }
+      tr.appendChild(td);
+    }
+    els.benchBody.appendChild(tr);
+  });
+
+  if (benchRows.length === 0) {
+    els.benchVerdict.textContent = benchRunning ? '' : '結果はまだありません。';
+    return;
+  }
+  if (!s.comparable) {
+    els.benchVerdict.textContent = benchRows.length < 2
+      ? '比較には 2 行以上が要ります。'
+      : `取得ページ数が行ごとに違う(${benchRows.map((r) => r.pages).join(' / ')})ので、速度比は出しません。`
+        + ' 対象サイトが小さいか、途中で止まった可能性があります。';
+    return;
+  }
+  if (!s.longEnough) {
+    // 短すぎる計測は並行度でなく往復のばらつきを測ってしまう。数を出さずに手当てを書く
+    const slowest = Math.max(...benchRows.map((r) => r.durationMs));
+    els.benchVerdict.textContent =
+      `どの回も ${slowest}ms 以内に終わっており(${MIN_BENCH_MS}ms 未満)、差は並行度ではなく往復のばらつきです。`
+      + ' 速度比は出しません。Max Pages を増やすか、Request Delay を足すか、応答の遅いページを含む URL で試してください。';
+    return;
+  }
+  const base = s.baseline, fast = s.fastest;
+  els.benchVerdict.textContent =
+    `Workers ${base.workers} → ${fast.workers} で ${s.speedup(fast)} 倍(${base.pagesPerSec} → ${fast.pagesPerSec} pages/s)。`
+    + ' この数はネットワークと対象サイトの応答に左右されるので、言語や実装の一般的な性能とは読まないでください。';
 }
 
 // ---------- 描画 ----------

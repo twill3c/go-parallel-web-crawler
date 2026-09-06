@@ -206,6 +206,75 @@ export function liveStats(state) {
   return { total, success, errors: total - success, durationMs, requestsPerSec, avgMs, p95Ms };
 }
 
+// ---------- ベンチマーク(F-38 / 原本 §21)----------
+
+/** ベンチで試す Workers の列。SPEC §2.5 の上限 20 を超えない */
+export const BENCH_WORKERS = [1, 2, 5, 10];
+
+/**
+ * benchRow は 1 回のクロールの statistics から表の 1 行を作る。
+ * pagesPerSec はサーバの requestsPerSec をそのまま使わず、同じ式(total / (durationMs/1000))で
+ * 割り直す。二つが食い違えば、どちらかが SPEC §5 の定義から外れている。
+ */
+export function benchRow(workers, st, reason) {
+  const seconds = st.durationMs / 1000;
+  const pagesPerSec = seconds > 0 ? Math.round((st.total / seconds) * 10) / 10 : 0;
+  return {
+    workers,
+    pages: st.total,
+    errors: st.errors,
+    seconds,
+    durationMs: st.durationMs,
+    pagesPerSec,
+    avgMs: st.avgMs,
+    p95Ms: st.p95Ms,
+    reason,
+  };
+}
+
+/**
+ * MIN_BENCH_MS は「比べてよい」と言うために各行が要する最低の所要時間。
+ * これより速いクロールでは、差が並行度でなく往復のばらつきで決まる。
+ * 実測(2026-09-07・ローカル合成サイト): 全行 20〜50 ms のとき Workers 1 が 444 pages/s、
+ * 5 が 750、10 が 267 と**単調ですらない**値が出た。数を出せば読み手はそれを結果として読むので、
+ * この下限を割ったら速度比も最速の印も出さない(HC-079)。
+ */
+export const MIN_BENCH_MS = 500;
+
+/**
+ * benchSummary は行の集合から、最速・基準(Workers 最小)・速度比・棒の割合を出す。
+ *
+ * 速度比を出してよいのは二つの前提が揃ったときだけ:
+ *   comparable — 全行が同じページ数を取れた(揃わなければ時間を並べても比較にならない)
+ *   longEnough — 最も遅い行が MIN_BENCH_MS 以上かかった(短すぎる計測は雑音)
+ * どちらかが崩れていれば、画面は数を出さずに理由を書く(HC-079: 裏づけの無い数・記号を出さない)。
+ */
+export function benchSummary(rows) {
+  if (rows.length === 0) {
+    return {
+      rows, fastest: null, baseline: null, maxPagesPerSec: 0,
+      comparable: false, longEnough: false, trustworthy: false,
+      speedup: () => 1, bar: () => 0,
+    };
+  }
+  const maxPagesPerSec = Math.max(...rows.map((r) => r.pagesPerSec));
+  const fastest = rows.reduce((a, b) => (b.pagesPerSec > a.pagesPerSec ? b : a));
+  const baseline = rows.reduce((a, b) => (b.workers < a.workers ? b : a));
+  const comparable = rows.length > 1 && rows.every((r) => r.pages === rows[0].pages);
+  const longEnough = rows.every((r) => r.durationMs >= MIN_BENCH_MS);
+  return {
+    rows,
+    fastest,
+    baseline,
+    maxPagesPerSec,
+    comparable,
+    longEnough,
+    trustworthy: comparable && longEnough,
+    speedup: (r) => (baseline.pagesPerSec > 0 ? Math.round((r.pagesPerSec / baseline.pagesPerSec) * 10) / 10 : 1),
+    bar: (r) => (maxPagesPerSec > 0 ? r.pagesPerSec / maxPagesPerSec : 0),
+  };
+}
+
 /** channel の中身: キュー待ち(送られたが取り出されていない)/ 取得中 / 完了 */
 export function channelCounts(state) {
   const crawling = Object.values(state.workers).filter((w) => w.status === WORKER.CRAWLING).length;

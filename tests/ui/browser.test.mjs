@@ -25,6 +25,9 @@ function startSite() {
     const n = 24;
     site = createServer((req, res) => {
       const delay = Number(new URL(req.url, 'http://x').searchParams.get('d') || 0);
+      // 遅延はリンク先にも引き継ぐ。引き継がないと開始 URL だけが遅く、
+      // 「Workers を増やしても総時間が変わらない」偽の観測になる(2026-09-07 に踏んだ)
+      const q = delay ? `?d=${delay}` : '';
       const body = () => {
         if (req.url.startsWith('/img.png')) {
           res.writeHead(200, { 'Content-Type': 'image/png' });
@@ -37,13 +40,13 @@ function startSite() {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         if (req.url === '/' || req.url.startsWith('/?')) {
           let h = '<title>Synthetic root</title>';
-          for (let i = 1; i <= n; i++) h += `<a href="/p${i}">p${i}</a>`;
-          h += '<a href="/img.png">img</a><a href="https://other.example.org/">ext</a>';
+          for (let i = 1; i <= n; i++) h += `<a href="/p${i}${q}">p${i}</a>`;
+          h += `<a href="/img.png">img</a><a href="https://other.example.org/">ext</a>`;
           return res.end(h);
         }
         const m = /^\/p(\d+)/.exec(req.url);
         const i = m ? Number(m[1]) : 0;
-        res.end(`<title>Page ${i}</title><a href="/">home</a><a href="/p${(i % n) + 1}">next</a>`);
+        res.end(`<title>Page ${i}</title><a href="/${q}">home</a><a href="/p${(i % n) + 1}${q}">next</a>`);
       };
       if (delay) setTimeout(body, delay); else body();
     });
@@ -207,6 +210,94 @@ test('T-402b: STOP で cancelled になり、Worker が全員 completed で畳�
   const states = await page.$$eval('#workerList .worker', (els) => els.map((e) => e.dataset.state));
   assert.deepEqual(states, ['completed', 'completed']);
   await page.screenshot({ path: join(outDir, 'stopped.png'), fullPage: true });
+  await page.close();
+});
+
+// T-602 / F-38: BENCHMARK が Workers を変えて 4 回走り、表が埋まり、速度比が出る。
+test('T-602: Worker Benchmark が 4 行そろい、最速行に印が付く', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('dialog', (d) => d.accept()); // 実行前の確認
+  await page.goto(`${appUrl}/`);
+  // 各応答を 300 ms 遅らせる。所要はおよそ ceil(pages/workers) × delay なので、
+  // 12 ページ・最大 Workers=10 でも 2 × 300 = 600 ms となり、全行が MIN_BENCH_MS(500 ms)を超える。
+  // 遅延なしだと 20〜50 ms で終わり、差は往復のばらつきになる(T-602c で別に検査)
+  await page.fill('#url', `${siteUrl}/?d=300`);
+  await page.$eval('#maxPages', (el) => { el.value = '12'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.fill('#delay', '0');
+  // 走らせる前は隠れている(hidden が効いていること — HC-190)
+  assert.equal(await page.$eval('#benchPanel', (e) => getComputedStyle(e).display), 'none');
+  await page.click('#bench');
+  await page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#benchBody tr')];
+    return rows.length === 4 && rows.every((r) => !r.classList.contains('pending'));
+  }, null, { timeout: 60000 });
+  assert.deepEqual(errors, []);
+
+  const rows = await page.$$eval('#benchBody tr', (els) => els.map((r) => ({
+    cells: [...r.children].map((c) => c.textContent.trim()),
+    best: r.classList.contains('best'),
+    barPct: r.querySelector('.bar') ? parseFloat(r.querySelector('.bar').style.width) : null,
+  })));
+  assert.deepEqual(rows.map((r) => r.cells[0]), ['1', '2', '5', '10']);
+  // 前提の検算: 全行が下限(MIN_BENCH_MS = 500ms)を超えている。超えていなければ
+  // 速度比は出ない仕様なので、以下の期待は成立しえない(HC-070: 対照の前提を assert で固定する)
+  const secs = rows.map((r) => parseFloat(r.cells[1]));
+  assert.ok(secs.every((s) => s >= 0.5), `前提が崩れている(所要 ${secs.join('/')}s)`);
+  // 全行が同じページ数を取れている(maxPages=12・到達可能 26 なので必ず 12)。
+  // 合成サイトの /p7 は 404 なので、12 件のうちエラーが混じる行がある(表記は「12 (err 1)」)
+  assert.deepEqual(rows.map((r) => parseInt(r.cells[5], 10)), [12, 12, 12, 12]);
+  assert.equal(rows.filter((r) => r.best).length, 1, '最速行の印が 1 行だけ付く');
+  // 棒は 0..100% に収まり、最速行が 100%
+  for (const r of rows) assert.ok(r.barPct > 0 && r.barPct <= 100, `bar=${r.barPct}`);
+  assert.equal(rows.find((r) => r.best).barPct, 100);
+  // 速度比が出ている(comparable=true なので「—」ではない)
+  for (const r of rows) assert.match(r.cells[4], /^×[\d.]+$/);
+  const verdict = await page.$eval('#benchVerdict', (e) => e.textContent);
+  assert.match(verdict, /倍/);
+  assert.match(verdict, /一般的な性能とは読まないでください/);
+  // 溢れが出ていない
+  const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  assert.ok(m.sw <= m.iw, `横溢れ ${m.sw} > ${m.iw}`);
+  await page.screenshot({ path: join(outDir, 'benchmark.png'), fullPage: true });
+  await page.close();
+});
+
+// T-602c / G-13: 速すぎるクロールでは速度比を出さず、理由と手当てを書く(裏づけの無い数を出さない)。
+test('T-602c: 短すぎる計測では速度比も最速の印も出さない', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  page.on('dialog', (d) => d.accept());
+  await page.goto(`${appUrl}/`);
+  await page.fill('#url', `${siteUrl}/`); // 遅延なし = 数十 ms で終わる
+  await page.$eval('#maxPages', (el) => { el.value = '12'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.fill('#delay', '0');
+  await page.click('#bench');
+  await page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#benchBody tr')];
+    return rows.length === 4 && rows.every((r) => !r.classList.contains('pending'));
+  }, null, { timeout: 60000 });
+  // 前提の検算: 実際に短かった(各行 500ms 未満)
+  const secs = await page.$$eval('#benchBody tr', (els) => els.map((r) => parseFloat(r.children[1].textContent)));
+  assert.ok(secs.every((s) => s < 0.5), `前提が崩れている(所要 ${secs.join('/')}s)`);
+  const ratios = await page.$$eval('#benchBody tr', (els) => els.map((r) => r.children[4].textContent.trim()));
+  assert.deepEqual(ratios, ['—', '—', '—', '—'], '短すぎる計測で速度比が出ている');
+  assert.equal(await page.$$eval('#benchBody tr.best', (els) => els.length), 0, '最速の印が出ている');
+  const verdict = await page.$eval('#benchVerdict', (e) => e.textContent);
+  assert.match(verdict, /往復のばらつき/);
+  assert.match(verdict, /Max Pages を増やす/);
+  await page.close();
+});
+
+test('T-602b: 確認をキャンセルするとベンチは走らない', async () => {
+  const page = await browser.newPage();
+  page.on('dialog', (d) => d.dismiss());
+  await page.goto(`${appUrl}/`);
+  await page.fill('#url', `${siteUrl}/`);
+  await page.click('#bench');
+  await page.waitForTimeout(600);
+  assert.equal(await page.$eval('#benchPanel', (e) => getComputedStyle(e).display), 'none');
+  assert.equal(await page.$eval('#status', (e) => e.dataset.status), 'idle');
   await page.close();
 });
 

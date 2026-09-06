@@ -61,6 +61,7 @@ button { font: inherit; font-weight: 700; letter-spacing: .04em; border: 0; bord
 button:disabled { opacity: .45; cursor: not-allowed; }
 .primary { background: var(--go); color: #04121a; }
 .danger { background: var(--err); color: #1a0505; }
+.ghost { background: transparent; color: var(--go); border: 1px solid var(--go); }
 .status { font-family: var(--mono); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .status[data-status="running"] { color: var(--go); border-color: var(--go); }
 .status[data-status="stopping"] { color: var(--warn); border-color: var(--warn); }
@@ -133,6 +134,18 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pages td.ptitle { max-width: 36ch; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-family: var(--sans); }
 .pages tr.err td.pstatus, .pages tr.err td.ptitle { color: var(--err); }
 .pages td.num { text-align: right; }
+
+/* benchmark */
+#benchPanel[hidden] { display: none; } /* display を持つ規則に [hidden] が負けないよう明示(HC-190) */
+.bench { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .9rem; }
+.bench th, .bench td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.bench th:first-child, .bench td:first-child { text-align: left; }
+.bench td { font-variant-numeric: tabular-nums; }
+.bench .barcell { width: 40%; min-width: 90px; padding-left: 0; padding-right: 0; }
+.bench .bar { display: block; height: 10px; border-radius: 3px; background: var(--go-dim); }
+.bench tr.best .bar { background: var(--go); }
+.bench tr.best td { color: var(--go); }
+.bench tr.pending td { color: var(--muted); }
 
 /* fleet: fixed footer */
 .fleet-footer {

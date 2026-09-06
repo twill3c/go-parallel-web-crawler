@@ -43,6 +43,7 @@
       <div class="actions">
         <button id="start" type="submit" class="primary">START CRAWL</button>
         <button id="stop" type="button" class="danger" disabled>STOP</button>
+        <button id="bench" type="button" class="ghost">BENCHMARK</button>
         <span id="status" class="status" data-status="idle">idle</span>
       </div>
     </form>
@@ -113,6 +114,19 @@
       <div><dt>P95</dt><dd id="stP95">0ms</dd></div>
     </dl>
     <p class="hint" id="reason"></p>
+  </section>
+
+  <section class="panel" id="benchPanel" aria-labelledby="bench-h" hidden>
+    <h2 id="bench-h">Worker Benchmark</h2>
+    <p class="hint" id="benchNote">同じ URL を Workers の本数だけ変えて順に走らせ、Pages/sec を比べます。
+      対象サイトへのアクセスは走らせた回数だけ増えます。</p>
+    <div class="table-wrap">
+      <table class="bench" id="benchTable">
+        <thead><tr><th>Workers</th><th>Time</th><th>Pages/s</th><th></th><th>速度比</th><th>Pages</th><th>P95</th></tr></thead>
+        <tbody id="benchBody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="benchVerdict"></p>
   </section>
 
   <section class="panel" aria-labelledby="errors-h">
