@@ -17,13 +17,13 @@ import (
 
 // 入力の境界(SPEC §2.5)。
 const (
-	MinWorkers, MaxWorkers   = 1, 20
-	MinPages, MaxPages       = 1, 100
-	MinDelayMs, MaxDelayMs   = 0, 5000
-	DefaultWorkers           = 5
-	DefaultMaxPages          = 50
-	DefaultDelayMs           = 200
-	maxRequestBody     int64 = 4096
+	MinWorkers, MaxWorkers       = 1, 20
+	MinPages, MaxPages           = 1, 100
+	MinDelayMs, MaxDelayMs       = 0, 5000
+	DefaultWorkers               = 5
+	DefaultMaxPages              = 50
+	DefaultDelayMs               = 200
+	maxRequestBody         int64 = 4096
 )
 
 // Server は API の状態(台帳・検証器)。
