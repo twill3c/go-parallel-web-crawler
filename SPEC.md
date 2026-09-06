@@ -124,7 +124,7 @@ UI は STOP で「`/stop` を呼ぶ **かつ** fetch を abort する」の二�
 | G-08 | 統計の独立再計算: サーバの `statistics` と、イベント列から再計算した値(total / success / errors / avg / p95)が一致 | イベントから再計算 | L3 |
 | G-09 | SSE の一括到着と逐次到着で、フロントの最終状態(pages / links / stats)が一致 | Node で app.js の reducer を両様で回す | L4 |
 | G-10 | 実ブラウザ検品: 合成サイトをクロールして、Worker 行の数 = workers、グラフのノード数 = pages 数、要素が viewBox に収まる(HC-159) | Playwright | L4 |
-| G-11 | 本番: `GET /api/health` が 200、`POST /api/crawl` の**最初のイベント到着が完了より先**(=ストリーミングが効いている)を測る。効かなければ D-02 の見込みを実測で上書きする | 本番 URL への実リクエスト | L5 |
+| G-11 | 本番: `GET /api/health` が 200、`POST /api/crawl` の**最初のイベント到着が完了より先**(=ストリーミングが効いている)を測る。効かなければ D-02 の見込みを実測で上書きする | 本番 URL への実リクエスト(`scripts/probe_stream.mjs`) | 実測 2026-09-07: 320 ms → 2,318 ms(D-02) |
 | G-12 | 同一 URL の重複エッジは出さない(`link_found` の (from,to) は一意) | イベント列の集合 | L2 |
 
 ## 5. データモデルとイベント
@@ -179,7 +179,7 @@ type Statistics struct {
 | ID | 判断 | 理由 |
 |---|---|---|
 | D-01 | Vercel の **Go Framework Preset**(ルート `main.go`・`PORT` で待ち受け・`framework: "go"`)を採る。原本 §9 の `api/*.go` 方式は取らない | Vercel 公式 docs(2026-08-11 更新)が推奨。旧 `api/*.go` 方式は `http.Flusher` 非対応で SSE が流せない(Vercel Community 2025-03-11 の公式回答) |
-| D-02 | **見込み**: Framework Preset では通常の `net/http` サーバが動くので `Flusher` が効き、SSE が逐次届く。**確かめる手段**: L5 で本番へ POST し、最初のイベント到着時刻と完了時刻の差を測る(G-11)。効かない場合も UI は一括到着で同じ最終状態になる(F-36, G-09) | 未実測。Node/Python 以外のストリーミングは docs に明記がない |
+| D-02 | 見込みだった「Framework Preset では `Flusher` が効き SSE が逐次届く」は**実測で成立**(2026-09-07・本番 go-parallel-web-crawler.vercel.app)。saijiki-lens を対象に workers=2 / maxPages=8 / delay=300ms で POST: チャンク 16 個、最初のチャンク 320 ms、最後 2,318 ms、イベント 116 件。go.dev でもチャンク 19 個(296 → 2,281 ms)。**最初のイベントは完了より約 2 秒先に届く**。効かない場合の保険(一括到着でも同じ最終状態 F-36 / G-09)は残す | 起票時は未実測(Node/Python 以外のストリーミングは docs に明記がない)。L5 で本番に対して測った |
 | D-03 | 原本 §19 の `crawlId` 発行 → 別エンドポイントで events 取得、の二段は取らず、**`POST /api/crawl` が直接 SSE を返す** | サーバレスでは呼び出しごとにインスタンスが違いうるので、メモリ上の crawl 台帳を別リクエストから引けない。一本のストリームなら保証がいらない |
 | D-04 | リンク抽出は正規表現でなく `golang.org/x/net/html` のトークナイザ | 属性の引用符・大文字小文字・`<base>` を正規表現で正しく扱うのは難しい。準標準ライブラリ 1 つだけ足す |
 | D-05 | Request Delay は Worker ごとの取得前スリープ | 「N Workers で並列に取得している」ことを見せたいので、全体のレートリミットではなく Worker 単位にする |

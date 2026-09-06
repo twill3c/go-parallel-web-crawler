@@ -2,63 +2,89 @@
 
 **See Go concurrency in action.**
 
+本番: **https://go-parallel-web-crawler.vercel.app**
+
 URL を一つ渡すと、そのサイト内のページを幅優先で巡回し、**Go の goroutine / channel /
 Worker Pool / context / sync.Mutex が実際のクロールでどう動いているか**をブラウザで見せる
-学習用アプリ。クロール結果よりも「Worker が今なにをしているか」を最重要の画面とする。
+学習用アプリ。クロール結果よりも「Worker が今なにをしているか」「channel に何件が溜まっているか」
+「STOP で context が全 Worker に届くか」を最重要の画面にしている。
 
-構想の原本は [docs/go-parallel-web-crawler-spec.md](docs/go-parallel-web-crawler-spec.md)、
-要求 ID 付きの正本は [SPEC.md](SPEC.md)、テストの対応表は [TEST_SPEC.md](TEST_SPEC.md)。
+構想の原本は [docs/go-parallel-web-crawler-spec.md](docs/go-parallel-web-crawler-spec.md)。
+AI コーディングエージェント向けの参照資料は次の四つ(原本 §32):
 
-## 状態
+| 文書 | 役割 |
+|---|---|
+| [SPEC.md](SPEC.md) | 仕様の正本。要求 F-xx・ゲート G-xx・設計判断 D-xx・実測値 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 実装前に読む。channel の組み方、なぜデッドロックしないか、なぜ止まるか |
+| [TEST_SPEC.md](TEST_SPEC.md) | テストの対応表(原本の TESTCASE.md に相当)。各ケースの期待値の出所 |
+| [ROADMAP.md](ROADMAP.md) | 未完了タスク。ここから作業する |
 
-**L0(足場)まで完了。** `GET /api/health` だけが動く。クローラ本体は L1 以降。
-
-| ループ | 範囲 | 状態 |
-|---|---|---|
-| L0 | 足場・Go 導入・SPEC/TEST_SPEC・Vercel 方式の調査 | 完了(2026-09-06) |
-| L1 | URL 検証(SSRF)・正規化・リンク抽出・URLSet | 未着手 |
-| L2 | Worker Pool・fetcher・context・統計 | 未着手 |
-| L3 | HTTP API と SSE | 未着手 |
-| L4 | 画面(Worker 表示・統計・SVG グラフ) | 未着手 |
-| L5 | GitHub・Vercel・文書 | 未着手 |
+あわせて [SECURITY.md](SECURITY.md)(SSRF 対策で守っていること・いないこと)。
 
 ## What can you learn?
 
-- goroutine
-- channel
-- Worker Pool
-- sync.Mutex
-- context cancellation
-- HTTP client(net/http)
-- URL parsing
-- concurrent processing
-- performance measurement
+| 題材 | どこで見えるか |
+|---|---|
+| goroutine | Workers 欄の 1 行が 1 goroutine。`worker.go` |
+| channel | 「Channel の中身」の jobs / results。`crawler.go` の三本の channel |
+| Worker Pool | Workers スライダで本数を変え、Requests/sec の変化を見る |
+| sync.Mutex | URLSet(既知の URL)。`queue.go` |
+| context cancellation | STOP を押すと全 Worker が ✓ Completed で畳まれる。`crawler.go` / `worker.go` |
+| HTTP client(net/http) | `fetcher.go`: タイムアウト・リダイレクト・Content-Type |
+| URL parsing | `urlnorm.go` / `parser.go`: 正規化(冪等)・相対参照の解決 |
+| concurrent processing | 応答を遅らせた合成サイトで、同時接続数の最大 = Workers を実測(T-203) |
+| performance measurement | Elapsed / Requests/sec / Avg / P95。イベント列から再計算して一致(G-08) |
 
 ## 動かす
 
 ```bash
-go run .                 # http://localhost:3000
-go test -race ./...      # テスト(ネットワークに出ない)
+go run .                                 # http://localhost:3000
+go test -race ./...                      # Go のテスト(ネットワークに出ない)
+node --test tests/ui/reducer.test.mjs    # 画面の reducer(実録 SSE フィクスチャ)
+node --test tests/ui/browser.test.mjs    # 実ブラウザ検品(Playwright を PLAYWRIGHT_DIR から借りる)
+node scripts/probe_stream.mjs https://go-parallel-web-crawler.vercel.app https://<対象>/  # 本番の SSE を測る
 ```
 
 Windows で `-race` を使うには 64 bit の C コンパイラ(mingw-w64)が要る。
+`.wt/gate.json` の `test_command` は `go test -race ./...`。
+
+## API
+
+| 経路 | 内容 |
+|---|---|
+| `POST /api/crawl` | `{url, workers(1..20), maxPages(1..100), requestDelayMs(0..5000)}` → `text/event-stream`。`crawl_started` / `worker_started` / `page_completed` / `link_found` / `worker_done` / `crawl_completed` |
+| `POST /api/crawl/{id}/stop` | 進行中クロールの context を cancel(同じインスタンスに当たったときだけ効く。画面は fetch の abort も併用) |
+| `GET /api/crawl/{id}` | 完了済み結果(メモリ・50 件・10 分) |
+| `GET /api/health` | `{"status":"ok"}` |
 
 ## 利用条件
 
 学習・デモ用途の小規模クローラです。**自分が管理するサイト、またはクロールが許可されている
-サイトで利用してください。** Workers ≤ 20・Max Pages ≤ 100・1 クロール ≤ 60 秒に固定しています。
+サイトで利用してください。** Workers ≤ 20・Max Pages ≤ 100・1 クロール ≤ 60 秒・同一ドメインのみ。
+robots.txt は読みません([ROADMAP.md](ROADMAP.md) A)。
 
 ## 構成
 
 ```
 main.go              PORT で待ち受ける net/http サーバ(Vercel Go Framework Preset)
-internal/api         HTTP ハンドラ(health / crawl / SSE)
-internal/crawler     クローラ本体(worker pool / queue / fetcher / parser)
-internal/security    URL 検証(SSRF 対策)
-internal/model       データモデル
-public/              画面(HTML / CSS / Vanilla JS、ビルド無し)
-tests/               リポジトリ横断の検査
+internal/api         HTTP ハンドラ(health / crawl / SSE / stop / result・台帳)
+internal/crawler     クローラ本体(manager / worker / queue / fetcher / parser / urlnorm)
+internal/security    URL 検証(SSRF 対策・dial 時の再検査)
+internal/model       データモデルとイベント
+public/              画面(HTML / CSS / Vanilla JS、ビルド無し。state.js は Node のテストと共有)
+tests/               リポジトリ横断の検査(go.mod の依存・reducer・実ブラウザ)
+scripts/             本番の SSE 計測
 ```
+
+## 実測で分かったこと
+
+- **Vercel の Go Framework Preset で SSE は逐次届く**(2026-09-07)。旧来の `api/*.go` 方式は
+  `http.Flusher` 非対応で流せない(Vercel Community 2025-03 の公式回答)。本番で 8 ページのクロールを
+  測ると、最初のチャンクは 320 ms、最後は 2,318 ms、間にチャンク 16 個(SPEC D-02)
+- **統計の独立再計算が最初の実行で食い違いを捕まえた。** Requests/sec を生の経過時間から出していたが、
+  イベント列には ms に丸めた `durationMs` しか無く、再計算は原理的に一致しなかった(HC-189)
+- **`hidden` 属性は `display` を持つ CSS に負ける。** 要素数・幾何・溢れの検査は全部緑のまま、
+  スクリーンショットの目視でだけ見つかった(HC-190)
 
 ## License
 
