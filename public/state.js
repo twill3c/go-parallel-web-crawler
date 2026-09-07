@@ -85,6 +85,9 @@ export function initialState() {
     stats: null, // crawl_completed の statistics
     reason: '',
     error: '',
+    robots: '', // obeyed / absent / unreachable / ignored(SPEC §5)
+    crawlDelayMs: 0, // robots.txt の Crawl-delay
+    robotsBlocked: 0, // robots.txt が拒否して辿らなかった URL の数
   };
 }
 
@@ -111,6 +114,9 @@ export function reduce(state, e) {
       state.stats = null;
       state.reason = '';
       state.error = '';
+      state.robots = e.robots || '';
+      state.crawlDelayMs = e.crawlDelayMs || 0;
+      state.robotsBlocked = 0;
       if (state.startUrl) {
         addNode(state, state.startUrl, '').queued = true;
         state.discovered = 1; // 開始 URL は最初から URLSet に入っている
@@ -164,6 +170,7 @@ export function reduce(state, e) {
       state.status = STATUS.COMPLETED;
       state.reason = e.reason || '';
       state.stats = e.statistics || null;
+      state.robotsBlocked = e.robotsBlocked || 0;
       break;
     }
     default:

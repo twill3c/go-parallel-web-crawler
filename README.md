@@ -54,7 +54,7 @@ Windows で `-race` を使うには 64 bit の C コンパイラ(mingw-w64)が�
 
 | 経路 | 内容 |
 |---|---|
-| `POST /api/crawl` | `{url, workers(1..20), maxPages(1..100), requestDelayMs(0..5000)}` → `text/event-stream`。`crawl_started` / `worker_started` / `page_completed` / `link_found` / `worker_done` / `crawl_completed` |
+| `POST /api/crawl` | `{url, workers(1..20), maxPages(1..100), requestDelayMs(0..5000), ignoreRobots?}` → `text/event-stream`。`crawl_started` / `worker_started` / `page_completed` / `link_found` / `worker_done` / `crawl_completed`。**`ignoreRobots` を省くと robots.txt に従います** |
 | `POST /api/crawl/{id}/stop` | 進行中クロールの context を cancel(同じインスタンスに当たったときだけ効く。画面は fetch の abort も併用) |
 | `GET /api/crawl/{id}` | 完了済み結果(メモリ・50 件・10 分) |
 | `GET /api/health` | `{"status":"ok"}` |
@@ -63,7 +63,10 @@ Windows で `-race` を使うには 64 bit の C コンパイラ(mingw-w64)が�
 
 学習・デモ用途の小規模クローラです。**自分が管理するサイト、またはクロールが許可されている
 サイトで利用してください。** Workers ≤ 20・Max Pages ≤ 100・1 クロール ≤ 60 秒・同一ドメインのみ。
-robots.txt は読みません([ROADMAP.md](ROADMAP.md) A)。
+
+**robots.txt には既定で従います**(RFC 9309)。最長一致・`*`/`$`・`Crawl-delay` を実装し、
+5xx で取得できないときは 1 ページも取りません。チェックを外せば無視できますが、
+それは自分が管理するサイトを試すための逃げ道です。詳細は [SECURITY.md](SECURITY.md)。
 
 ## 構成
 

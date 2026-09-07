@@ -46,6 +46,15 @@ const (
 	ReasonMaxPages  = "max_pages" // 上限に達し、まだ未取得の URL があった
 	ReasonCancelled = "cancelled" // STOP / 切断
 	ReasonDeadline  = "deadline"  // クロール全体の上限時間
+	ReasonRobots    = "robots"    // robots.txt が到達不能(RFC 9309: complete disallow)で始めなかった
+)
+
+// robots.txt の状態(crawl_started.robots)。
+const (
+	RobotsObeyed      = "obeyed"      // 取得できて規則に従っている
+	RobotsAbsent      = "absent"      // 4xx = 規則が無い(すべて許可)
+	RobotsUnreachable = "unreachable" // 5xx / 接続失敗 = complete disallow
+	RobotsIgnored     = "ignored"     // 利用者が「従わない」を選んだ
 )
 
 // Event は SSE で流す 1 件(SPEC §5 の表)。Type ごとに使うフィールドが違い、使わないものは省く。
@@ -59,6 +68,8 @@ type Event struct {
 	MaxPages       int    `json:"maxPages,omitempty"`
 	RequestDelayMs int    `json:"requestDelayMs,omitempty"`
 	StartedAt      string `json:"startedAt,omitempty"`
+	Robots         string `json:"robots,omitempty"`       // robots.txt の状態(上の定数)
+	CrawlDelayMs   int    `json:"crawlDelayMs,omitempty"` // robots.txt の Crawl-delay(あれば)
 
 	// worker_started / page_completed / worker_done
 	WorkerID   int    `json:"workerId,omitempty"`
@@ -75,8 +86,9 @@ type Event struct {
 	Queued bool   `json:"queued,omitempty"` // この辺の先がキューに入ったか(既知・上限超過なら false)
 
 	// crawl_completed
-	Reason     string      `json:"reason,omitempty"`
-	Statistics *Statistics `json:"statistics,omitempty"`
+	Reason        string      `json:"reason,omitempty"`
+	Statistics    *Statistics `json:"statistics,omitempty"`
+	RobotsBlocked int         `json:"robotsBlocked,omitempty"` // robots.txt で辿らなかった URL の数
 }
 
 // イベント種別。
@@ -96,4 +108,9 @@ type Result struct {
 	Pages      []Page     `json:"pages"`
 	Links      []Link     `json:"links"`
 	Statistics Statistics `json:"statistics"`
+	// Robots は robots.txt の状態、RobotsBlocked は規則で辿らなかった URL の数、
+	// EffectiveDelayMs は実際に使った Request Delay(robots.txt の Crawl-delay を下限に取る)
+	Robots           string `json:"robots,omitempty"`
+	RobotsBlocked    int    `json:"robotsBlocked"`
+	EffectiveDelayMs int    `json:"effectiveDelayMs"`
 }

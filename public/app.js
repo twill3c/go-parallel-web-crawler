@@ -16,6 +16,7 @@ const els = {
   stElapsed: $('stElapsed'), stRps: $('stRps'), stAvg: $('stAvg'), stP95: $('stP95'), reason: $('reason'),
   errors: $('errors'), errCount: $('errCount'), pages: $('pages'),
   bench: $('bench'), benchPanel: $('benchPanel'), benchBody: $('benchBody'), benchNote: $('benchNote'), benchVerdict: $('benchVerdict'),
+  robots: $('robots'), robotsHint: $('robotsHint'), robotsStatus: $('robotsStatus'), stRobots: $('stRobots'),
 };
 
 let state = initialState();
@@ -47,7 +48,7 @@ function setStatus(s) {
   els.start.disabled = running;
   els.stop.disabled = s !== STATUS.RUNNING;
   els.bench.disabled = running;
-  for (const el of [els.url, els.workers, els.maxPages, els.delay]) el.disabled = running;
+  for (const el of [els.url, els.workers, els.maxPages, els.delay, els.robots]) el.disabled = running;
 }
 
 function showMessage(text) {
@@ -63,6 +64,7 @@ async function startCrawl(override) {
     workers: Number(els.workers.value),
     maxPages: Number(els.maxPages.value),
     requestDelayMs: Number(els.delay.value),
+    ignoreRobots: !els.robots.checked,
     ...override,
   };
   state = initialState();
@@ -287,6 +289,8 @@ function render() {
   els.stRps.textContent = rps;
   els.stAvg.textContent = fmtMs(st.avgMs);
   els.stP95.textContent = fmtMs(st.p95Ms);
+  els.stRobots.textContent = state.robotsBlocked;
+  els.robotsStatus.textContent = robotsText(state);
   els.reason.textContent = state.reason ? `完了理由: ${reasonText(state.reason)}` : '';
 
   renderWorkers();
@@ -301,7 +305,27 @@ function reasonText(r) {
     cancelled: 'cancelled — STOP / 切断で context が cancel された',
     deadline: 'deadline — クロール全体の上限時間(60 秒)',
     closed: 'closed — 完了イベントを受け取る前に接続が閉じた',
+    robots: 'robots — robots.txt がこのクロールを許していない',
   }[r] || r;
+}
+
+// robots.txt の状態を一文にする。数を出すときは、その数が何を数えたものかまで書く。
+function robotsText(state) {
+  if (!state.robots) return '';
+  const delay = state.crawlDelayMs ? `Crawl-delay ${state.crawlDelayMs}ms を下限に採用。` : '';
+  switch (state.robots) {
+    case 'obeyed':
+      return `robots.txt: 取得して従っています。${delay}`
+        + (state.robotsBlocked ? `辿らなかった URL ${state.robotsBlocked} 件。` : '');
+    case 'absent':
+      return 'robots.txt: ありません(4xx)。RFC 9309 では「規則なし = すべて許可」です。';
+    case 'unreachable':
+      return 'robots.txt: 取得できません(5xx / 接続失敗)。RFC 9309 は「到達不能なら全面的に拒否」と定めるので、クロールしません。';
+    case 'ignored':
+      return 'robots.txt: 従わない設定です。自分が管理するサイトでだけ使ってください。';
+    default:
+      return '';
+  }
 }
 
 const SYM = { waiting: '○', crawling: '●', error: '!', completed: '✓' };

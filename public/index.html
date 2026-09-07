@@ -40,6 +40,11 @@
         <span class="inline"><input id="delay" name="delay" type="number" min="0" max="5000" step="50" value="200"> <span class="unit">ms</span></span>
         <span class="hint">各 Worker が取得前に待つ時間(0〜5000)</span>
       </label>
+      <label class="field check-field">
+        <span class="label">robots.txt</span>
+        <span class="inline"><input id="robots" type="checkbox" checked> <span>従う(RFC 9309)</span></span>
+        <span class="hint" id="robotsHint">開始前に 1 回だけ取得します</span>
+      </label>
       <div class="actions">
         <button id="start" type="submit" class="primary">START CRAWL</button>
         <button id="stop" type="button" class="danger" disabled>STOP</button>
@@ -48,7 +53,8 @@
       </div>
     </form>
     <p class="notice" role="note">自分が管理するサイト、またはクロールが許可されているサイトで利用してください。
-      学習・デモ用の小規模クローラです(Workers ≤ 20・Max Pages ≤ 100・1 回 ≤ 60 秒・同一ドメインのみ・robots.txt は読みません)。</p>
+      学習・デモ用の小規模クローラです(Workers ≤ 20・Max Pages ≤ 100・1 回 ≤ 60 秒・同一ドメインのみ)。
+      robots.txt は既定で従います。外せるのは<strong>自分が管理するサイトを試すため</strong>です。</p>
     <p id="message" class="message" hidden></p>
   </section>
 
@@ -112,7 +118,9 @@
       <div><dt>Requests/sec</dt><dd id="stRps">0</dd></div>
       <div><dt>Avg</dt><dd id="stAvg">0ms</dd></div>
       <div><dt>P95</dt><dd id="stP95">0ms</dd></div>
+      <div><dt>robots 除外</dt><dd id="stRobots">0</dd></div>
     </dl>
+    <p class="hint" id="robotsStatus"></p>
     <p class="hint" id="reason"></p>
   </section>
 

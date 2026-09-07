@@ -18,6 +18,8 @@ const outDir = join(here, 'out');
 const pwDir = process.env.PLAYWRIGHT_DIR || resolve(root, '..', 'hacchu-forge', 'node_modules', 'playwright');
 
 let chromium, browser, site, siteUrl, server, appUrl;
+// robots.txt の内容。null なら 404(= 規則なし)。テストが差し替える
+let robotsBody = null;
 
 // 合成サイト: / → /p1..p24、各ページから / と隣へ。/p7 は 404、/img.png は画像。
 function startSite() {
@@ -29,6 +31,14 @@ function startSite() {
       // 「Workers を増やしても総時間が変わらない」偽の観測になる(2026-09-07 に踏んだ)
       const q = delay ? `?d=${delay}` : '';
       const body = () => {
+        if (req.url.startsWith('/robots.txt')) {
+          if (robotsBody === null) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end('no robots');
+          }
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          return res.end(robotsBody);
+        }
         if (req.url.startsWith('/img.png')) {
           res.writeHead(200, { 'Content-Type': 'image/png' });
           return res.end('png');
@@ -299,6 +309,72 @@ test('T-602b: 確認をキャンセルするとベンチは走らない', async 
   assert.equal(await page.$eval('#benchPanel', (e) => getComputedStyle(e).display), 'none');
   assert.equal(await page.$eval('#status', (e) => e.dataset.status), 'idle');
   await page.close();
+});
+
+// T-726 / ROADMAP-A: 画面が robots.txt に既定で従い、状態と除外件数を出す。
+test('T-726: robots.txt に従い、状態と除外件数を画面に出す', async () => {
+  robotsBody = 'User-agent: *\nDisallow: /p1\nAllow: /p10\n'; // /p1, /p11..p19 を拒否・/p10 は許可
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(`${appUrl}/`);
+    // 既定は「従う」
+    assert.equal(await page.$eval('#robots', (e) => e.checked), true);
+    await runCrawl(page, { url: `${siteUrl}/`, workers: 3, maxPages: 20, delay: 0 });
+    await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+    assert.deepEqual(errors, []);
+
+    const status = await page.$eval('#robotsStatus', (e) => e.textContent);
+    assert.match(status, /取得して従っています/);
+    const blocked = Number(await page.$eval('#stRobots', (e) => e.textContent));
+    assert.ok(blocked > 0, 'robots 除外が 0 —— 規則が効いていない');
+    // 前提の検算: /p1 と /p11 は取得されず、Allow の /p10 は取得されている
+    const urls = await page.$$eval('#pages td.purl', (els) => els.map((e) => e.title));
+    const paths = urls.map((u) => new URL(u).pathname);
+    assert.ok(!paths.includes('/p1'), 'Disallow の /p1 を取得した');
+    assert.ok(!paths.includes('/p11'), 'Disallow の前方一致 /p11 を取得した');
+    assert.ok(paths.includes('/p10'), 'Allow の /p10 が取得されていない(最長一致が効いていない)');
+    await page.close();
+  } finally {
+    robotsBody = null;
+  }
+});
+
+// T-727: 「従わない」に外すと、拒否されたページも取る(自分のサイト向けの逃げ道)。
+test('T-727: robots.txt を外すと拒否されたページも取る', async () => {
+  robotsBody = 'User-agent: *\nDisallow: /\n';
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${appUrl}/`);
+    await page.uncheck('#robots');
+    await runCrawl(page, { url: `${siteUrl}/`, workers: 2, maxPages: 5, delay: 0 });
+    await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+    const pages = Number(await page.$eval('#stPages', (e) => e.textContent));
+    assert.ok(pages > 0, 'Disallow: / に従ってしまっている');
+    const status = await page.$eval('#robotsStatus', (e) => e.textContent);
+    assert.match(status, /従わない設定/);
+    await page.close();
+  } finally {
+    robotsBody = null;
+  }
+});
+
+// T-728: Disallow: / のサイトを既定で叩くと、1 ページも取らずに理由を書いて終わる。
+test('T-728: Disallow: / のサイトはクロールせず理由を出す', async () => {
+  robotsBody = 'User-agent: *\nDisallow: /\n';
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${appUrl}/`);
+    await runCrawl(page, { url: `${siteUrl}/`, workers: 2, maxPages: 5, delay: 0 });
+    await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+    assert.equal(Number(await page.$eval('#stPages', (e) => e.textContent)), 0);
+    const reason = await page.$eval('#reason', (e) => e.textContent);
+    assert.match(reason, /robots.txt がこのクロールを許していない/);
+    await page.close();
+  } finally {
+    robotsBody = null;
+  }
 });
 
 test('T-403: フッタ 5 項目の並び(DOM で検査)', async () => {

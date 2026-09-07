@@ -36,6 +36,9 @@ context / sync.Mutex が実際のクロールでどう動いているか**をブ
 | F-13 | Worker の状態遷移 waiting → crawling → (error →) waiting → completed を追跡し、イベントで通知する | must | §11, §17 |
 | F-14 | 各 Worker はリクエストごとに Request Delay だけ待つ(ctx で中断可) | must | §4 |
 | F-15 | クロール全体に上限時間(§2.5)を置き、超えたら `deadline` 理由で完了する | must | §24 |
+| F-16 | **robots.txt に従う(RFC 9309・L7 実装)。** 開始前に `/robots.txt` を 1 回取得し、product token `GoParallelWebCrawler` で群を選ぶ(大文字小文字を無視・複数一致は結合・一致が無ければ `*`)。Allow/Disallow は最長一致、同長なら Allow。`*` は 0 個以上の任意文字、末尾 `$` は終端。判定はパス+クエリに対して行い、percent-encoding は両側を復号して揃える | should | §34 A |
+| F-17 | robots.txt の応答による分岐(RFC 9309): 2xx = 従う(`obeyed`)/ 4xx = 規則なし・すべて許可(`absent`)/ **5xx・接続失敗 = 全面拒否**(`unreachable`。1 ページも取らず `reason: robots` で完了)。`Crawl-delay` は Request Delay の**下限**として効かせる(利用者の値が大きければそちらを使う)。読取上限 512 KiB | should | §34 A |
+| F-18 | 利用者は robots.txt を「従わない」に外せる(`ignoreRobots`)。**既定は従う** —— 欄の無い要求も従う側になる。画面は外した状態を明示する | should | — |
 
 ### 2.2 API
 
@@ -127,6 +130,7 @@ UI は STOP で「`/stop` を呼ぶ **かつ** fetch を abort する」の二�
 | G-11 | 本番: `GET /api/health` が 200、`POST /api/crawl` の**最初のイベント到着が完了より先**(=ストリーミングが効いている)を測る。効かなければ D-02 の見込みを実測で上書きする | 本番 URL への実リクエスト(`scripts/probe_stream.mjs`) | 実測 2026-09-07: 320 ms → 2,318 ms(D-02) |
 | G-12 | 同一 URL の重複エッジは出さない(`link_found` の (from,to) は一意) | イベント列の集合 | L2 |
 | G-13 | ベンチマークの速度比は、**全行が同じページ数を取れたときだけ**出す。揃わなければ数を出さず理由を書く(HC-079: 裏づけの無い数を表に出さない) | `benchSummary().comparable` の単体検査と実ブラウザ | L6 |
+| G-14 | robots.txt の判定は RFC 9309 の規範に一致する。群の選択・最長一致・同長時の Allow 優先・`*`/`$`・percent-encoding・状態ごとの分岐(2xx/4xx/5xx)をそれぞれ検査し、**陽性対照(`Disallow: /` が実際に撃つ)と、除外が 0 件なら落とす検査**を対で置く | 表駆動 + httptest + 実ブラウザ | L7 |
 
 ## 5. データモデルとイベント
 
@@ -152,12 +156,12 @@ type Statistics struct {
 
 | type | payload |
 |---|---|
-| `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt}` |
+| `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt, robots, crawlDelayMs}`。`robots` は `obeyed` / `absent` / `unreachable` / `ignored`(F-17) |
 | `worker_started` | `{workerId, url, t}`(t = 開始からの ms) |
 | `page_completed` | `{workerId, url, statusCode, durationMs, title, error?, t}` |
 | `link_found` | `{from, to, queued, t}`(同一ドメインの**一意な辺**すべて。`queued` が true なら `to` がこのとき URLSet に入りキューへ送られた。既知の URL・上限で入らなかった URL への辺は false。**辺の集合は結果の `links` と一致し**、画面はこれでリンク構造(閉路・上限で切られた先)を描く — L4 で改訂) |
 | `worker_done` | `{workerId, pages, t}`(goroutine が抜けた) |
-| `crawl_completed` | `{reason: "exhausted" \| "max_pages" \| "cancelled" \| "deadline", statistics, t}` |
+| `crawl_completed` | `{reason: "exhausted" \| "max_pages" \| "cancelled" \| "deadline" \| "robots", statistics, robotsBlocked, t}` |
 
 - **P95** は取得済みページの `durationMs` を昇順に並べ、`ceil(0.95 × n)` 番目(1 始まり)の値
 - **Requests/sec** は `total / (durationMs / 1000)`
@@ -189,6 +193,10 @@ type Statistics struct {
 
 ## 8. スコープ外
 
-原本 §3 のとおり。ログイン・DB・履歴・JS レンダリング・robots.txt の完全実装・サイトマップ・
-認証ページ・外部ドメインの巡回・長時間クロール。**robots.txt は MVP では読まない**が、
-画面の注意書き(F-35)と上限(§2.5)で代替する。
+原本 §3 のとおり。ログイン・DB・履歴・JS レンダリング・サイトマップの巡回・
+認証ページ・外部ドメインの巡回・長時間クロール。
+
+**robots.txt は L7 で実装した(F-16〜F-18)**。ただし RFC 9309 の全部ではない —— キャッシュ
+(1 クロール 1 回しか読まないので不要)と、robots.txt 自体のリダイレクト追跡の独自制御
+(`http.Client` 任せ。同一ドメイン制限がそのまま効く)は実装していない。
+`Sitemap:` 行は収集するが辿らない。

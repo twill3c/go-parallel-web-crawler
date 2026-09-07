@@ -2,8 +2,10 @@ package crawler
 
 import (
 	"context"
+	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -21,6 +23,9 @@ type Config struct {
 	Timeout      time.Duration // 1 リクエストの上限(既定 5 s)
 	Deadline     time.Duration // クロール全体の上限(既定 60 s)
 	Client       *http.Client  // nil なら NewClient(StartURL, Timeout) を使う
+	// RespectRobots が真なら、開始前に robots.txt を 1 回取得して規則に従う(RFC 9309)。
+	// 偽なら取得しない —— 自分が管理するサイトを試すときのための逃げ道で、画面は既定で真にする
+	RespectRobots bool
 }
 
 // 既定値(SPEC §2.5)。
@@ -72,6 +77,12 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 	t0 := time.Now()
 	clock := func() int64 { return time.Since(t0).Milliseconds() }
 
+	// robots.txt を 1 回だけ取る(同一ドメインしか辿らないのでホストは 1 つ)
+	robots, robotsState := fetchRobots(ctx, cfg)
+	if robots != nil && robots.CrawlDelay > cfg.RequestDelay {
+		cfg.RequestDelay = robots.CrawlDelay // Crawl-delay は下限として効かせる
+	}
+
 	jobs := make(chan string, cfg.MaxPages) // D-06: URLSet が maxPages で止まるので送信は詰まらない
 	results := make(chan result)
 	events := make(chan model.Event, 64)
@@ -86,10 +97,32 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		}
 	}()
 
+	crawlDelayMs := 0
+	if robots != nil {
+		crawlDelayMs = int(robots.CrawlDelay / time.Millisecond)
+	}
 	events <- model.Event{
 		Type: model.EvCrawlStarted, T: 0, CrawlID: cfg.CrawlID, URL: start,
 		Workers: cfg.Workers, MaxPages: cfg.MaxPages, RequestDelayMs: int(cfg.RequestDelay / time.Millisecond),
 		StartedAt: t0.UTC().Format(time.RFC3339Nano),
+		Robots:    robotsState, CrawlDelayMs: crawlDelayMs,
+	}
+
+	// robots.txt が到達不能なら 1 ページも取らずに終える(RFC 9309 の MUST)。
+	// 開始 URL 自体が Disallow のときも同じ扱い —— 1 ページも取れないので始めない
+	if robotsState == model.RobotsUnreachable || (robots != nil && !robots.AllowsURL(start)) {
+		if robotsState != model.RobotsUnreachable {
+			robotsState = model.RobotsObeyed
+		}
+		stats := ComputeStatistics(nil, time.Since(t0))
+		events <- model.Event{Type: model.EvCrawlCompleted, T: clock(), Reason: model.ReasonRobots, Statistics: &stats}
+		close(events)
+		deliver.Wait()
+		close(jobs)
+		return model.Result{
+			Status: "completed", Reason: model.ReasonRobots, Statistics: stats,
+			Robots: robotsState, EffectiveDelayMs: int(cfg.RequestDelay / time.Millisecond),
+		}
 	}
 
 	// Worker Pool
@@ -105,6 +138,8 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 	var pages []model.Page
 	var links []model.Link
 	edgeSeen := map[model.Link]bool{}
+	robotsBlockedSeen := map[string]bool{}
+	robotsBlocked := 0
 	capped := false
 	inflight := 0
 
@@ -124,6 +159,15 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		}
 		for _, l := range r.links {
 			if !SameDomain(start, l) || LooksNonHTML(l) {
+				continue
+			}
+			if robots != nil && !robots.AllowsURL(l) {
+				// robots.txt が拒否した URL は辿らない。辺としても出さない
+				// (画面のグラフに「行けない先」を描かないため。数だけ出す)
+				if !robotsBlockedSeen[l] {
+					robotsBlockedSeen[l] = true
+					robotsBlocked++
+				}
 				continue
 			}
 			e := model.Link{From: r.page.URL, To: l}
@@ -162,11 +206,60 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		reason = model.ReasonMaxPages
 	}
 	stats := ComputeStatistics(pages, time.Since(t0))
-	events <- model.Event{Type: model.EvCrawlCompleted, T: clock(), Reason: reason, Statistics: &stats}
+	events <- model.Event{
+		Type: model.EvCrawlCompleted, T: clock(), Reason: reason, Statistics: &stats,
+		RobotsBlocked: robotsBlocked,
+	}
 	close(events)
 	deliver.Wait()
 
-	return model.Result{Status: "completed", Reason: reason, Pages: pages, Links: links, Statistics: stats}
+	return model.Result{
+		Status: "completed", Reason: reason, Pages: pages, Links: links, Statistics: stats,
+		Robots: robotsState, RobotsBlocked: robotsBlocked,
+		EffectiveDelayMs: int(cfg.RequestDelay / time.Millisecond),
+	}
+}
+
+// fetchRobots は開始 URL のホストから /robots.txt を取り、判定器と状態を返す。
+// RespectRobots が偽なら取りに行かない。RFC 9309 の状態の扱い:
+//
+//	2xx        → 解析して従う(RobotsObeyed)
+//	4xx        → 規則が無い(RobotsAbsent。すべて許可)
+//	5xx / 失敗 → 到達不能(RobotsUnreachable。complete disallow)
+func fetchRobots(ctx context.Context, cfg Config) (*Robots, string) {
+	if !cfg.RespectRobots {
+		return nil, model.RobotsIgnored
+	}
+	base, err := url.Parse(cfg.StartURL)
+	if err != nil {
+		return nil, model.RobotsUnreachable
+	}
+	ref := &url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/robots.txt"}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ref.String(), nil)
+	if err != nil {
+		return nil, model.RobotsUnreachable
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	resp, err := cfg.Client.Do(req)
+	if err != nil {
+		// 接続できない = 到達不能。ただし ctx のキャンセルは別物なので許可側に倒す
+		// (止めたのは利用者であって、サイトの意思表示ではない)
+		if ctx.Err() != nil {
+			return nil, model.RobotsAbsent
+		}
+		return nil, model.RobotsUnreachable
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		return ParseRobots(io.LimitReader(resp.Body, RobotsMaxBytes), UserAgentToken), model.RobotsObeyed
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, model.RobotsAbsent
+	default:
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, model.RobotsUnreachable
+	}
 }
 
 // ComputeStatistics は pages から統計を決定的に計算する(SPEC §5)。
