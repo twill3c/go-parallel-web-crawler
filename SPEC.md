@@ -40,6 +40,8 @@ context / sync.Mutex が実際のクロールでどう動いているか**をブ
 | F-16 | **robots.txt に従う(RFC 9309・L7 実装)。** 開始前に `/robots.txt` を 1 回取得し、product token `GoParallelWebCrawler` で群を選ぶ(大文字小文字を無視・複数一致は結合・一致が無ければ `*`)。Allow/Disallow は最長一致、同長なら Allow。`*` は 0 個以上の任意文字、末尾 `$` は終端。判定はパス+クエリに対して行い、percent-encoding は両側を復号して揃える | should | §34 A |
 | F-17 | robots.txt の応答による分岐(RFC 9309): 2xx = 従う(`obeyed`)/ 4xx = 規則なし・すべて許可(`absent`)/ **5xx・接続失敗 = 全面拒否**(`unreachable`。1 ページも取らず `reason: robots` で完了)。`Crawl-delay` は Request Delay の**下限**として効かせる(利用者の値が大きければそちらを使う)。読取上限 512 KiB | should | §34 A |
 | F-18 | 利用者は robots.txt を「従わない」に外せる(`ignoreRobots`)。**既定は従う** —— 欄の無い要求も従う側になる。画面は外した状態を明示する | should | — |
+| F-19 | **サイトマップから種 URL を足す**(L11 実装・`useSitemap`)。robots.txt の `Sitemap:` 行(同一ドメインのもの)を使い、無ければ `/sitemap.xml` を試す。`sitemapindex` は 1 段だけ辿る(合計 5 ファイル・1,000 URL・4 MiB まで)。種にするのは同一ドメイン・robots が許す・未知の URL だけで、**上限ページ数と同一ドメイン制限は変わらない**。**既定は使わない** —— 対象へのリクエストが増え、辿る範囲も広がるため。状態は `used` / `absent` / `declared_missing` / `skipped` | could | §34 B |
+| F-20b | **外部ドメインを辿らずに数える**(L11 実装)。同一ドメイン外へのリンクをホスト単位(`www.` は畳む・サブドメインは畳まない)で集計し、一意な URL 数と参照元ページ数を出す。URL は正規化してから数える(scheme の違いは畳まない)。画面は「辿っていない。数えただけ」と明示する | could | §34 C |
 
 ### 2.2 API
 
@@ -134,6 +136,7 @@ UI は STOP で「`/stop` を呼ぶ **かつ** fetch を abort する」の二�
 | G-12 | 同一 URL の重複エッジは出さない(`link_found` の (from,to) は一意) | イベント列の集合 | L2 |
 | G-13 | ベンチマークの速度比は、**全行が同じページ数を取れたときだけ**出す。揃わなければ数を出さず理由を書く(HC-079: 裏づけの無い数を表に出さない) | `benchSummary().comparable` の単体検査と実ブラウザ | L6 |
 | G-15 | 状態の区分(`ok` / `redirect` / `missing` / `server` / `failed` / `other`)は Go 側と画面側で**同じ表**を返す。どちらかを直せばもう一方のテストが落ちる | 同じ 11 行の表を両言語のテストに置く | L9 |
+| G-17 | サイトマップと外部集計の検査は、**後退経路を塞いでから測る**(HC-206)。robots.txt の `Sitemap:` 行を検査するときは `/sitemap.xml` を 404 にし、**塞がっていること自体もテスト内で assert する**。外部集計は「辿っていないこと」と「数えていること」を対で確かめる | httptest + 実ブラウザ(対照つき) | L11 |
 | G-16 | 言語比較は、**比較が成立した条件でだけ倍率を出す**。成立の条件は三つ揃うこと ——(a) 両実装が同じページ数・同じ完了理由に達した (b) 合成サイトが律速でない(Go の Workers を N にしたときの速度倍率が N×0.6 以上) (c) 中央値が両方 500ms 以上。崩れた条件では倍率を出さず理由を書く | `bench/run.mjs` が判定して JSON に書き、`langRows` が表示を抑える。単体・実ブラウザ・陽性対照 | L10 |
 | G-14 | robots.txt の判定は RFC 9309 の規範に一致する。群の選択・最長一致・同長時の Allow 優先・`*`/`$`・percent-encoding・状態ごとの分岐(2xx/4xx/5xx)をそれぞれ検査し、**陽性対照(`Disallow: /` が実際に撃つ)と、除外が 0 件なら落とす検査**を対で置く | 表駆動 + httptest + 実ブラウザ | L7 |
 
@@ -161,7 +164,8 @@ type Statistics struct {
 
 | type | payload |
 |---|---|
-| `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt, robots, crawlDelayMs}`。`robots` は `obeyed` / `absent` / `unreachable` / `ignored`(F-17) |
+| `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt, robots, crawlDelayMs, sitemap, sitemapUrls}`。`robots` は `obeyed` / `absent` / `unreachable` / `ignored`(F-17)、`sitemap` は `used` / `absent` / `declared_missing` / `skipped`(F-19) |
+| `external_found` | `{from, to, t}`(**別ドメイン**への一意な辺。辿らない・数えるだけ — F-20b) |
 | `worker_started` | `{workerId, url, t}`(t = 開始からの ms) |
 | `page_completed` | `{workerId, url, statusCode, durationMs, title, error?, description?, h1?, canonical?, finalUrl?, t}` |
 | `link_found` | `{from, to, queued, t}`(同一ドメインの**一意な辺**すべて。`queued` が true なら `to` がこのとき URLSet に入りキューへ送られた。既知の URL・上限で入らなかった URL への辺は false。**辺の集合は結果の `links` と一致し**、画面はこれでリンク構造(閉路・上限で切られた先)を描く — L4 で改訂) |
@@ -200,8 +204,11 @@ type Statistics struct {
 
 ## 8. スコープ外
 
-原本 §3 のとおり。ログイン・DB・履歴・JS レンダリング・サイトマップの巡回・
-認証ページ・外部ドメインの巡回・長時間クロール。
+原本 §3 のとおり。ログイン・DB・履歴・JS レンダリング・認証ページ・
+**外部ドメインの巡回**(L11 で数えるようにしたが、辿らないのは変わらない)・長時間クロール。
+
+サイトマップは L11 で**種 URL として**使うようにした(F-19)。原本 §3 の「サイトマップ解析」を
+やらないと書いたのは MVP の話で、§34 B が将来拡張として挙げていたもの。
 
 **robots.txt は L7 で実装した(F-16〜F-18)**。ただし RFC 9309 の全部ではない —— キャッシュ
 (1 クロール 1 回しか読まないので不要)と、robots.txt 自体のリダイレクト追跡の独自制御

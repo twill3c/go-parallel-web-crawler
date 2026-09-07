@@ -157,7 +157,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .seo dd { margin: 0; overflow-wrap: anywhere; }
 
 /* benchmark */
-#benchPanel[hidden], #langPanel[hidden] { display: none; } /* display を持つ規則に [hidden] が負けないよう明示(HC-193) */
+#benchPanel[hidden], #langPanel[hidden], #externalPanel[hidden] { display: none; } /* display を持つ規則に [hidden] が負けないよう明示(HC-193) */
 .bench { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .9rem; }
 .bench th, .bench td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .bench th:first-child, .bench td:first-child { text-align: left; }

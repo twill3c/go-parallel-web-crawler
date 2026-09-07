@@ -88,7 +88,24 @@ export function initialState() {
     robots: '', // obeyed / absent / unreachable / ignored(SPEC §5)
     crawlDelayMs: 0, // robots.txt の Crawl-delay
     robotsBlocked: 0, // robots.txt が拒否して辿らなかった URL の数
+    sitemap: '', // used / absent / declared_missing / skipped(原本 §34 B)
+    sitemapUrls: 0, // サイトマップが挙げていた URL の数
+    external: new Map(), // host → { host, links:Set, fromPages:Set }(原本 §34 C・辿らない)
   };
+}
+
+/** externalDomains は外部ドメインを件数の多い順(同数ならホスト名順)に返す。 */
+export function externalDomains(state) {
+  return [...state.external.values()]
+    .map((d) => ({ host: d.host, links: d.links.size, fromPages: d.fromPages.size }))
+    .sort((a, b) => (b.links - a.links) || a.host.localeCompare(b.host));
+}
+
+/** externalTotal は外部への一意な URL の総数。 */
+export function externalTotal(state) {
+  let n = 0;
+  for (const d of state.external.values()) n += d.links.size;
+  return n;
 }
 
 /**
@@ -117,6 +134,9 @@ export function reduce(state, e) {
       state.robots = e.robots || '';
       state.crawlDelayMs = e.crawlDelayMs || 0;
       state.robotsBlocked = 0;
+      state.sitemap = e.sitemap || '';
+      state.sitemapUrls = e.sitemapUrls || 0;
+      state.external = new Map();
       if (state.startUrl) {
         addNode(state, state.startUrl, '').queued = true;
         state.discovered = 1; // 開始 URL は最初から URLSet に入っている
@@ -162,6 +182,25 @@ export function reduce(state, e) {
         n.queued = true;
         state.discovered += 1; // URLSet に入った(= jobs channel に送られた)URL の数
       }
+      break;
+    }
+    case 'external_found': {
+      // 別ドメインへのリンク(原本 §34 C)。**辿らない。数えるだけ。**
+      if (!e.from || !e.to) break;
+      let host;
+      try {
+        host = new URL(e.to).hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        break;
+      }
+      if (!host) break;
+      let d = state.external.get(host);
+      if (!d) {
+        d = { host, links: new Set(), fromPages: new Set() };
+        state.external.set(host, d);
+      }
+      d.links.add(e.to);
+      d.fromPages.add(e.from);
       break;
     }
     case 'worker_done': {

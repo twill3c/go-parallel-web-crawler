@@ -63,6 +63,14 @@ const (
 	RobotsIgnored     = "ignored"     // 利用者が「従わない」を選んだ
 )
 
+// サイトマップの状態(crawl_started.sitemap・原本 §34 B)。
+const (
+	SitemapUsed            = "used"             // 取得して種 URL に使った
+	SitemapAbsent          = "absent"           // /sitemap.xml が無かった(宣言もされていない)
+	SitemapDeclaredMissing = "declared_missing" // robots.txt が Sitemap を宣言しているのに取れなかった
+	SitemapSkipped         = "skipped"          // 利用者が使わない設定にした
+)
+
 // Event は SSE で流す 1 件(SPEC §5 の表)。Type ごとに使うフィールドが違い、使わないものは省く。
 type Event struct {
 	Type string `json:"type"`
@@ -76,6 +84,8 @@ type Event struct {
 	StartedAt      string `json:"startedAt,omitempty"`
 	Robots         string `json:"robots,omitempty"`       // robots.txt の状態(上の定数)
 	CrawlDelayMs   int    `json:"crawlDelayMs,omitempty"` // robots.txt の Crawl-delay(あれば)
+	Sitemap        string `json:"sitemap,omitempty"`      // サイトマップの状態(上の定数)
+	SitemapURLs    int    `json:"sitemapUrls,omitempty"`  // サイトマップが挙げていた URL の数
 
 	// worker_started / page_completed / worker_done
 	WorkerID    int    `json:"workerId,omitempty"`
@@ -107,6 +117,7 @@ const (
 	EvWorkerStarted  = "worker_started"
 	EvPageCompleted  = "page_completed"
 	EvLinkFound      = "link_found"
+	EvExternalFound  = "external_found" // 別ドメインへのリンク(辿らない・数えるだけ)
 	EvWorkerDone     = "worker_done"
 	EvCrawlCompleted = "crawl_completed"
 )
@@ -123,4 +134,18 @@ type Result struct {
 	Robots           string `json:"robots,omitempty"`
 	RobotsBlocked    int    `json:"robotsBlocked"`
 	EffectiveDelayMs int    `json:"effectiveDelayMs"`
+	// サイトマップ(原本 §34 B)。URLs は挙がっていた数、Seeded は実際に種として入れた数
+	Sitemap       string `json:"sitemap,omitempty"`
+	SitemapURLs   int    `json:"sitemapUrls"`
+	SitemapSeeded int    `json:"sitemapSeeded"`
+	// 外部ドメイン(原本 §34 C)。**辿っていない。数えただけ**
+	External      []ExternalDomainCount `json:"external"`
+	ExternalLinks int                   `json:"externalLinks"`
+}
+
+// ExternalDomainCount は外部ドメイン 1 件の集計(crawler.ExternalDomain と同じ形)。
+type ExternalDomainCount struct {
+	Host      string `json:"host"`
+	Links     int    `json:"links"`
+	FromPages int    `json:"fromPages"`
 }

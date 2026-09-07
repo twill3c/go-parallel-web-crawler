@@ -59,6 +59,9 @@ type CrawlRequest struct {
 	// IgnoreRobots が真のときだけ robots.txt を無視する。**既定は従う**ので、
 	// 欄が無い古いクライアントからの要求も従う側になる(安全側が既定)
 	IgnoreRobots bool `json:"ignoreRobots"`
+	// UseSitemap はサイトマップから種 URL を足すか(原本 §34 B)。**既定は使わない** ——
+	// 足すと対象サイトへのリクエストが 1 件増え、辿る範囲も広がるので、頼まれたときだけ行う
+	UseSitemap bool `json:"useSitemap"`
 }
 
 // validate は境界(§2.5)と URL(§2.4)を検査し、crawler.Config を組む。
@@ -97,6 +100,7 @@ func (s *Server) validate(ctx context.Context, req CrawlRequest) (crawler.Config
 		Timeout:       crawler.DefaultTimeout,
 		Deadline:      crawler.DefaultDeadline,
 		RespectRobots: !req.IgnoreRobots,
+		UseSitemap:    req.UseSitemap,
 	}
 	if s.AllowPrivate {
 		cfg.Client = crawler.NewClient(startURL, crawler.ClientOptions{Timeout: cfg.Timeout, AllowPrivate: true})

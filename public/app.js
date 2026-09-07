@@ -4,6 +4,7 @@ import {
   BENCH_WORKERS, benchRow, benchSummary, MIN_BENCH_MS,
   statusClass, STATUS_SYMBOL, brokenPages,
   langRows, langVerdict,
+  externalDomains, externalTotal,
 } from './state.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +22,8 @@ const els = {
   robots: $('robots'), robotsHint: $('robotsHint'), robotsStatus: $('robotsStatus'), stRobots: $('stRobots'),
   langPanel: $('langPanel'), langBody: $('langBody'), langVerdict: $('langVerdict'),
   langUrl: $('langUrl'), langConditions: $('langConditions'),
+  sitemap: $('sitemap'), sitemapStatus: $('sitemapStatus'), stExternal: $('stExternal'),
+  externalPanel: $('externalPanel'), externalBody: $('externalBody'), externalCount: $('externalCount'),
 };
 
 let state = initialState();
@@ -52,7 +55,7 @@ function setStatus(s) {
   els.start.disabled = running;
   els.stop.disabled = s !== STATUS.RUNNING;
   els.bench.disabled = running;
-  for (const el of [els.url, els.workers, els.maxPages, els.delay, els.robots]) el.disabled = running;
+  for (const el of [els.url, els.workers, els.maxPages, els.delay, els.robots, els.sitemap]) el.disabled = running;
 }
 
 function showMessage(text) {
@@ -69,6 +72,7 @@ async function startCrawl(override) {
     maxPages: Number(els.maxPages.value),
     requestDelayMs: Number(els.delay.value),
     ignoreRobots: !els.robots.checked,
+    useSitemap: els.sitemap.checked,
     ...override,
   };
   state = initialState();
@@ -354,7 +358,10 @@ function render() {
   els.stAvg.textContent = fmtMs(st.avgMs);
   els.stP95.textContent = fmtMs(st.p95Ms);
   els.stRobots.textContent = state.robotsBlocked;
+  els.stExternal.textContent = externalTotal(state);
   els.robotsStatus.textContent = robotsText(state);
+  els.sitemapStatus.textContent = sitemapText(state);
+  renderExternal();
   els.reason.textContent = state.reason ? `完了理由: ${reasonText(state.reason)}` : '';
 
   renderWorkers();
@@ -389,6 +396,38 @@ function robotsText(state) {
       return 'robots.txt: 従わない設定です。自分が管理するサイトでだけ使ってください。';
     default:
       return '';
+  }
+}
+
+// サイトマップの状態を一文にする(原本 §34 B)。
+function sitemapText(state) {
+  switch (state.sitemap) {
+    case 'used':
+      return `sitemap.xml: ${state.sitemapUrls} 件の URL を読み、同一ドメインの未知のものを種に足しました。`;
+    case 'absent':
+      return 'sitemap.xml: ありません。トップからのリンクだけを辿りました。';
+    case 'declared_missing':
+      return 'sitemap.xml: robots.txt が場所を宣言していますが取得できませんでした。トップからのリンクだけを辿りました。';
+    default:
+      return ''; // skipped(使わない設定)のときは何も言わない
+  }
+}
+
+// 外部ドメインの表(原本 §34 C)。辿っていないことを見出しで明示している。
+function renderExternal() {
+  const domains = externalDomains(state);
+  els.externalPanel.hidden = domains.length === 0;
+  els.externalCount.textContent = String(domains.length);
+  els.externalBody.textContent = '';
+  for (const d of domains) {
+    const tr = document.createElement('tr');
+    for (let i = 0; i < 3; i++) {
+      const td = document.createElement('td');
+      td.textContent = [d.host, String(d.links), String(d.fromPages)][i];
+      if (i === 0) td.style.textAlign = 'left';
+      tr.appendChild(td);
+    }
+    els.externalBody.appendChild(tr);
   }
 }
 

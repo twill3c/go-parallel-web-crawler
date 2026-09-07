@@ -37,6 +37,8 @@ AI コーディングエージェント向けの参照資料は次の四つ(原�
 | Worker Pool の効き方 | BENCHMARK ボタン。Workers 1/2/5/10 を順に走らせて Pages/s を並べる。**速すぎる計測では数を出さない**(下限 500ms)|
 | HTML の走り読み | 同じトークナイザ走査で description / h1 / canonical を拾う。行を押すと開く |
 | リンク切れの直し方 | 取れなかったページに**参照元**を添える。直すのは参照元の側 |
+| サイトマップ | `sitemap.xml` を種にすると、トップから辿れないページにも届く(既定は使わない) |
+| 外部への出口 | 同一ドメイン外のリンクをホスト単位で数える。**辿らない** |
 
 ## 動かす
 
@@ -58,7 +60,7 @@ Windows で `-race` を使うには 64 bit の C コンパイラ(mingw-w64)が�
 
 | 経路 | 内容 |
 |---|---|
-| `POST /api/crawl` | `{url, workers(1..20), maxPages(1..100), requestDelayMs(0..5000), ignoreRobots?}` → `text/event-stream`。`crawl_started` / `worker_started` / `page_completed` / `link_found` / `worker_done` / `crawl_completed`。**`ignoreRobots` を省くと robots.txt に従います** |
+| `POST /api/crawl` | `{url, workers(1..20), maxPages(1..100), requestDelayMs(0..5000), ignoreRobots?, useSitemap?}` → `text/event-stream`。`crawl_started` / `worker_started` / `page_completed` / `link_found` / `external_found` / `worker_done` / `crawl_completed`。**`ignoreRobots` を省くと robots.txt に従います**。`useSitemap` を省くとサイトマップは読みません |
 | `POST /api/crawl/{id}/stop` | 進行中クロールの context を cancel(同じインスタンスに当たったときだけ効く。画面は fetch の abort も併用) |
 | `GET /api/crawl/{id}` | 完了済み結果(メモリ・50 件・10 分) |
 | `GET /api/health` | `{"status":"ok"}` |

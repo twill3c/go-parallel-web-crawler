@@ -26,6 +26,9 @@ type Config struct {
 	// RespectRobots が真なら、開始前に robots.txt を 1 回取得して規則に従う(RFC 9309)。
 	// 偽なら取得しない —— 自分が管理するサイトを試すときのための逃げ道で、画面は既定で真にする
 	RespectRobots bool
+	// UseSitemap が真なら、robots.txt の Sitemap 行(無ければ /sitemap.xml)から種 URL を足す。
+	// 同一ドメイン制限と上限ページ数は変わらない(原本 §34 B)
+	UseSitemap bool
 }
 
 // 既定値(SPEC §2.5)。
@@ -97,6 +100,13 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		}
 	}()
 
+	// サイトマップの取得(原本 §34 B)。robots.txt が Sitemap 行を持てばそれを、無ければ /sitemap.xml を試す
+	var sitemapSeeds []string
+	sitemapState := model.SitemapSkipped
+	if cfg.UseSitemap && robotsState != model.RobotsUnreachable {
+		sitemapSeeds, sitemapState = fetchSitemap(ctx, cfg, start, robots)
+	}
+
 	crawlDelayMs := 0
 	if robots != nil {
 		crawlDelayMs = int(robots.CrawlDelay / time.Millisecond)
@@ -106,6 +116,7 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		Workers: cfg.Workers, MaxPages: cfg.MaxPages, RequestDelayMs: int(cfg.RequestDelay / time.Millisecond),
 		StartedAt: t0.UTC().Format(time.RFC3339Nano),
 		Robots:    robotsState, CrawlDelayMs: crawlDelayMs,
+		Sitemap: sitemapState, SitemapURLs: len(sitemapSeeds),
 	}
 
 	// robots.txt が到達不能なら 1 ページも取らずに終える(RFC 9309 の MUST)。
@@ -140,12 +151,38 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 	edgeSeen := map[model.Link]bool{}
 	robotsBlockedSeen := map[string]bool{}
 	robotsBlocked := 0
+	external := NewExternalTally() // 外部ドメインは辿らずに数える(原本 §34 C)
 	capped := false
 	inflight := 0
 
 	seen.Add(start)
 	jobs <- start
 	inflight++
+
+	// サイトマップの URL を種として足す(原本 §34 B)。同一ドメイン・robots・上限は開始 URL と同じ扱い。
+	// **辿る順は BFS のまま**で、ここで足したものは開始 URL の次に並ぶ
+	sitemapAdded := 0
+	for _, u := range sitemapSeeds {
+		if seen.Len() >= cfg.MaxPages {
+			capped = true
+			break
+		}
+		if !SameDomain(start, u) || LooksNonHTML(u) || seen.Has(u) {
+			continue
+		}
+		if robots != nil && !robots.AllowsURL(u) {
+			if !robotsBlockedSeen[u] {
+				robotsBlockedSeen[u] = true
+				robotsBlocked++
+			}
+			continue
+		}
+		if seen.Add(u) {
+			jobs <- u
+			inflight++
+			sitemapAdded++
+		}
+	}
 
 	for inflight > 0 {
 		r := <-results
@@ -158,7 +195,18 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 			continue // 止められた後は新しい URL を足さない(G-07)
 		}
 		for _, l := range r.links {
-			if !SameDomain(start, l) || LooksNonHTML(l) {
+			if !SameDomain(start, l) {
+				// 別ドメインは辿らない。**数えるだけ**(原本 §34 C)。
+				// 同じ (from,to) を二度数えないよう、辺として既知かで抑える
+				e := model.Link{From: r.page.URL, To: l}
+				if !edgeSeen[e] {
+					edgeSeen[e] = true
+					external.Add(r.page.URL, l)
+					events <- model.Event{Type: model.EvExternalFound, T: clock(), From: r.page.URL, To: l}
+				}
+				continue
+			}
+			if LooksNonHTML(l) {
 				continue
 			}
 			if robots != nil && !robots.AllowsURL(l) {
@@ -217,7 +265,87 @@ func Run(parent context.Context, cfg Config, sink func(model.Event)) model.Resul
 		Status: "completed", Reason: reason, Pages: pages, Links: links, Statistics: stats,
 		Robots: robotsState, RobotsBlocked: robotsBlocked,
 		EffectiveDelayMs: int(cfg.RequestDelay / time.Millisecond),
+		Sitemap:          sitemapState,
+		SitemapURLs:      len(sitemapSeeds),
+		SitemapSeeded:    sitemapAdded,
+		External:         external.Domains(),
+		ExternalLinks:    external.Total(),
 	}
+}
+
+// fetchSitemap は種 URL を取りに行く(原本 §34 B)。
+// robots.txt が Sitemap 行を持てばそれを使い、無ければ /sitemap.xml を試す。
+// sitemapindex なら 1 段だけ辿る(入れ子を無限に追わない)。
+func fetchSitemap(ctx context.Context, cfg Config, start string, robots *Robots) ([]string, string) {
+	locations := []string{}
+	if robots != nil {
+		for _, s := range robots.Sitemaps {
+			if SameDomain(start, s) { // 別ドメインのサイトマップは使わない
+				locations = append(locations, s)
+			}
+		}
+	}
+	declared := len(locations) > 0
+	if !declared {
+		if base, err := url.Parse(start); err == nil {
+			locations = append(locations, (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/sitemap.xml"}).String())
+		}
+	}
+
+	var seeds []string
+	seen := map[string]bool{}
+	found := false
+	// 1 段目 + index を辿る 2 段目。合わせて 5 ファイルまで
+	for i := 0; i < len(locations) && i < 5; i++ {
+		sm, ok := getSitemap(ctx, cfg, locations[i])
+		if !ok {
+			continue
+		}
+		found = true
+		if sm.IsIndex {
+			for _, nested := range sm.URLs {
+				if len(locations) < 5 && SameDomain(start, nested) {
+					locations = append(locations, nested)
+				}
+			}
+			continue
+		}
+		for _, u := range sm.URLs {
+			n, err := Normalize(u)
+			if err != nil || seen[n] {
+				continue
+			}
+			seen[n] = true
+			seeds = append(seeds, n)
+		}
+	}
+	switch {
+	case !found && declared:
+		return nil, model.SitemapDeclaredMissing
+	case !found:
+		return nil, model.SitemapAbsent
+	default:
+		return seeds, model.SitemapUsed
+	}
+}
+
+// getSitemap は 1 ファイル取って解析する。取れなければ ok=false。
+func getSitemap(ctx context.Context, cfg Config, loc string) (Sitemap, bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loc, nil)
+	if err != nil {
+		return Sitemap{}, false
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	resp, err := cfg.Client.Do(req)
+	if err != nil {
+		return Sitemap{}, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return Sitemap{}, false
+	}
+	return ParseSitemap(io.LimitReader(resp.Body, SitemapMaxBytes)), true
 }
 
 // fetchRobots は開始 URL のホストから /robots.txt を取り、判定器と状態を返す。

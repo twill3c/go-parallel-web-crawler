@@ -45,6 +45,11 @@
         <span class="inline"><input id="robots" type="checkbox" checked> <span>従う(RFC 9309)</span></span>
         <span class="hint" id="robotsHint">開始前に 1 回だけ取得します</span>
       </label>
+      <label class="field check-field">
+        <span class="label">sitemap.xml</span>
+        <span class="inline"><input id="sitemap" type="checkbox"> <span>種 URL に使う</span></span>
+        <span class="hint">トップから辿れないページにも届きます</span>
+      </label>
       <div class="actions">
         <button id="start" type="submit" class="primary">START CRAWL</button>
         <button id="stop" type="button" class="danger" disabled>STOP</button>
@@ -119,8 +124,10 @@
       <div><dt>Avg</dt><dd id="stAvg">0ms</dd></div>
       <div><dt>P95</dt><dd id="stP95">0ms</dd></div>
       <div><dt>robots 除外</dt><dd id="stRobots">0</dd></div>
+      <div><dt>外部リンク</dt><dd id="stExternal">0</dd></div>
     </dl>
     <p class="hint" id="robotsStatus"></p>
+    <p class="hint" id="sitemapStatus"></p>
     <p class="hint" id="reason"></p>
   </section>
 
@@ -135,6 +142,17 @@
       </table>
     </div>
     <p class="hint" id="benchVerdict"></p>
+  </section>
+
+  <section class="panel" id="externalPanel" aria-labelledby="external-h" hidden>
+    <h2 id="external-h">外部ドメイン <span class="count" id="externalCount">0</span></h2>
+    <p class="hint">同一ドメインの外に出ているリンクの行き先です。<strong>辿っていません。数えただけです。</strong></p>
+    <div class="table-wrap">
+      <table class="bench" id="externalTable">
+        <thead><tr><th>ドメイン</th><th>リンク</th><th>参照元ページ</th></tr></thead>
+        <tbody id="externalBody"></tbody>
+      </table>
+    </div>
   </section>
 
   <section class="panel" id="langPanel" aria-labelledby="lang-h" hidden>

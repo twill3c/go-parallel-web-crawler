@@ -31,6 +31,12 @@ function startSite() {
       // 「Workers を増やしても総時間が変わらない」偽の観測になる(2026-09-07 に踏んだ)
       const q = delay ? `?d=${delay}` : '';
       const body = () => {
+        if (req.url.startsWith('/sitemap.xml')) {
+          // トップからは辿れない /hidden1, /hidden2 を挙げる(原本 §34 B の効きを測る)
+          res.writeHead(200, { 'Content-Type': 'application/xml' });
+          return res.end('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            + `<url><loc>${siteUrl}/hidden1</loc></url><url><loc>${siteUrl}/hidden2</loc></url></urlset>`);
+        }
         if (req.url.startsWith('/robots.txt')) {
           if (robotsBody === null) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -51,7 +57,10 @@ function startSite() {
         if (req.url === '/' || req.url.startsWith('/?')) {
           let h = '<title>Synthetic root</title>';
           for (let i = 1; i <= n; i++) h += `<a href="/p${i}${q}">p${i}</a>`;
-          h += `<a href="/img.png">img</a><a href="https://other.example.org/">ext</a>`;
+          h += `<a href="/img.png">img</a>`;
+          // 外部ドメイン(原本 §34 C)。辿らずに数えられることを測る
+          h += '<a href="https://other.example.org/">ext</a><a href="https://other.example.org/2">ext2</a>';
+          h += '<a href="https://elsewhere.example.net/">ext3</a>';
           return res.end(h);
         }
         const m = /^\/p(\d+)/.exec(req.url);
@@ -117,7 +126,8 @@ after(async () => {
   site?.close();
 });
 
-async function runCrawl(page, { url, workers, maxPages, delay }) {
+async function runCrawl(page, { url, workers, maxPages, delay, sitemap = false }) {
+  if (sitemap) await page.check('#sitemap'); else await page.uncheck('#sitemap');
   await page.fill('#url', url);
   await page.$eval('#workers', (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(workers));
   await page.$eval('#maxPages', (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(maxPages));
@@ -353,6 +363,58 @@ test('T-907: 書誌情報の行が押すと開き、canonical の異同まで出
   assert.match(open[0], /見出し/);
   assert.match(open[0], /の説明/);
   assert.match(open[0], /canonical/);
+  await page.close();
+});
+
+// T-1115 / ROADMAP-C: 外部ドメインを辿らずに数え、表に出す。
+test('T-1115: 外部ドメインの表が出て、辿ってはいない', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`${appUrl}/`);
+  // 走らせる前は隠れている(hidden が効いていること — HC-193)
+  assert.equal(await page.$eval('#externalPanel', (e) => getComputedStyle(e).display), 'none');
+  await runCrawl(page, { url: `${siteUrl}/`, workers: 3, maxPages: 10, delay: 0 });
+  await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+  assert.deepEqual(errors, []);
+
+  const rows = await page.$$eval('#externalBody tr', (els) => els.map((r) => [...r.children].map((c) => c.textContent.trim())));
+  const hosts = rows.map((r) => r[0]);
+  assert.ok(hosts.includes('other.example.org'), `外部ドメインが無い: ${JSON.stringify(hosts)}`);
+  assert.ok(hosts.includes('elsewhere.example.net'), `2 つ目の外部ドメインが無い: ${JSON.stringify(hosts)}`);
+  // other.example.org は 2 つの URL を持つので elsewhere より上に来る(件数の降順)
+  assert.equal(hosts[0], 'other.example.org');
+  assert.equal(rows[0][1], '2');
+  // 統計にも総数が出ている
+  assert.ok(Number(await page.$eval('#stExternal', (e) => e.textContent)) >= 3);
+  // **辿っていないこと**: ページ一覧に外部ドメインが 1 件も無い
+  const urls = await page.$$eval('#pages td.purl', (els) => els.map((e) => e.title));
+  assert.ok(!urls.some((u) => u.includes('example.org') || u.includes('example.net')), '外部ドメインを取得した');
+  await page.screenshot({ path: join(outDir, 'external.png'), fullPage: true });
+  await page.close();
+});
+
+// T-1116 / ROADMAP-B: サイトマップを使うと、トップから辿れないページに届く。
+// **対照**: チェックを外すと届かない。
+test('T-1116: sitemap.xml を種にすると隠れたページに届く', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto(`${appUrl}/`);
+
+  // 対照(使わない): /hidden1 に届かない
+  await runCrawl(page, { url: `${siteUrl}/`, workers: 3, maxPages: 30, delay: 0, sitemap: false });
+  await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+  const without = await page.$$eval('#pages td.purl', (els) => els.map((e) => e.title));
+  assert.ok(!without.some((u) => u.includes('/hidden')), '使わない設定でも隠れたページに届いた —— 対照が成立していない');
+  assert.equal(await page.$eval('#sitemapStatus', (e) => e.textContent), '');
+
+  // 使う: 届く
+  await runCrawl(page, { url: `${siteUrl}/`, workers: 3, maxPages: 30, delay: 0, sitemap: true });
+  await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+  const withSm = await page.$$eval('#pages td.purl', (els) => els.map((e) => e.title));
+  assert.ok(withSm.some((u) => u.endsWith('/hidden1')), `隠れたページに届いていない: ${withSm.length} ページ`);
+  assert.ok(withSm.some((u) => u.endsWith('/hidden2')));
+  const status = await page.$eval('#sitemapStatus', (e) => e.textContent);
+  assert.match(status, /2 件の URL を読み/);
   await page.close();
 });
 
