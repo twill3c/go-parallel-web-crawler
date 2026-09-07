@@ -3,7 +3,7 @@ import {
   createSSEParser, initialState, reduce, liveStats, channelCounts, STATUS, WORKER,
   BENCH_WORKERS, benchRow, benchSummary, MIN_BENCH_MS,
   statusClass, STATUS_SYMBOL, brokenPages,
-  langRows, langVerdict,
+  langRows, langVerdict, langCrossRun,
   externalDomains, externalTotal,
 } from './state.js';
 
@@ -21,7 +21,7 @@ const els = {
   bench: $('bench'), benchPanel: $('benchPanel'), benchBody: $('benchBody'), benchNote: $('benchNote'), benchVerdict: $('benchVerdict'),
   robots: $('robots'), robotsHint: $('robotsHint'), robotsStatus: $('robotsStatus'), stRobots: $('stRobots'),
   langPanel: $('langPanel'), langBody: $('langBody'), langVerdict: $('langVerdict'),
-  langUrl: $('langUrl'), langConditions: $('langConditions'),
+  langUrl: $('langUrl'), langConditions: $('langConditions'), langCrossRun: $('langCrossRun'),
   sitemap: $('sitemap'), sitemapStatus: $('sitemapStatus'), stExternal: $('stExternal'),
   externalPanel: $('externalPanel'), externalBody: $('externalBody'), externalCount: $('externalCount'),
 };
@@ -302,6 +302,22 @@ async function loadLangResults() {
   els.langVerdict.textContent = v
     ? v.text
     : 'この実測では比較が成立した条件がありませんでした(理由は各行の備考)。';
+
+  // 実行をまたいだ再現性。**1 回の実行の中で安定していても、実行をまたぐと結論が変わる条件がある**
+  const cr = langCrossRun(data);
+  if (cr) {
+    const fmt = (r) => `${r.label}: ${r.min}〜${r.max} 倍`;
+    const parts = [`同じ条件を別の実行で ${cr.runs} 回測った範囲。`];
+    if (cr.reproduced.length) parts.push(`再現した条件 —— ${cr.reproduced.map(fmt).join(' / ')}。`);
+    if (cr.notReproduced.length) {
+      parts.push(`**再現しなかった条件** —— ${cr.notReproduced.map(fmt).join(' / ')}。`
+        + 'この機械では、待ち時間の無い条件の倍率は実行ごとに動きます。1 回の実行の中で安定していても、実行をまたぐと結論が変わります。');
+    }
+    if (cr.urlRatios.length > 1) parts.push(`URL 正規化の比も実行ごとに ${cr.urlRatios.join(' / ')} と動きました。`);
+    els.langCrossRun.textContent = parts.join('').replace(/\*\*/g, '');
+  } else {
+    els.langCrossRun.textContent = '';
+  }
 
   const u = data.urlNormalize;
   if (u && u.okMatches && !u.noisy) {

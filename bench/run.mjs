@@ -11,12 +11,13 @@
 //   - 条件(機械・版・日付・引数)を結果と一緒に書く。**条件の無い数は読めない**
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, appendFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { cpus, totalmem, release } from 'node:os';
 
 import { startSite } from './site.mjs';
+import { spawn } from 'node:child_process';
 
 // **同期 API を使ってはならない** —— 合成サイトはこのプロセスで動いており、
 // イベントループを止めると応答できなくなる(2026-09-07 に踏んだ)
@@ -45,12 +46,41 @@ const spread = (xs) => ({ min: Math.min(...xs), max: Math.max(...xs) });
 const MIN_BENCH_MS = 500;
 
 async function build() {
-  const bin = join(root, 'bench', 'out', process.platform === 'win32' ? 'crawlbench.exe' : 'crawlbench');
-  const ubin = join(root, 'bench', 'out', process.platform === 'win32' ? 'urlbench.exe' : 'urlbench');
+  const exe = (n) => join(root, 'bench', 'out', process.platform === 'win32' ? `${n}.exe` : n);
+  const bin = exe('crawlbench');
+  const ubin = exe('urlbench');
+  const sbin = exe('benchsite');
   mkdirSync(dirname(bin), { recursive: true });
   await execFileAsync(GO, ['build', '-o', bin, './cmd/crawlbench'], { cwd: root });
   await execFileAsync(GO, ['build', '-o', ubin, './cmd/urlbench'], { cwd: root });
-  return { bin, ubin };
+  await execFileAsync(GO, ['build', '-o', sbin, './cmd/benchsite'], { cwd: root });
+  return { bin, ubin, sbin };
+}
+
+/**
+ * startGoSite は Go 製の合成サイトを別プロセスで立てる。
+ * **Node 版は 1 スレッドなので、遅延 0 の条件では受け側が先に飽和して
+ * 「クローラでなくサーバを測る」ことになる**(2026-09-07 実測: goScaling が 2.7 止まり)。
+ * Go 版は複数のコアで捌けるので、その交絡を外せる。
+ */
+function startGoSite(sbin, { pages, delay, bytes, links }) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(sbin, ['-pages', String(pages), '-delay', String(delay),
+      '-bytes', String(bytes), '-links', String(links)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let buf = '';
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) { settled = true; p.kill(); reject(new Error('合成サイトが起動しない')); } }, 15000);
+    p.stdout.on('data', (d) => {
+      buf += d;
+      const nl = buf.indexOf('\n');
+      if (nl < 0 || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const { url } = JSON.parse(buf.slice(0, nl));
+      resolve({ url, close: async () => { p.kill(); } });
+    });
+    p.on('error', (e) => { if (!settled) { settled = true; clearTimeout(timer); reject(e); } });
+  });
 }
 
 const runJson = async (cmd, args) => {
@@ -59,8 +89,10 @@ const runJson = async (cmd, args) => {
 };
 
 /** crawlCase は 1 つの条件で両実装を交互に reps 回走らせ、中央値を返す。 */
-async function crawlCase({ bin, label, pages, delay, bytes, links, workers, maxPages }) {
-  const site = await startSite({ pages, delay, bytes, links });
+async function crawlCase({ bin, sbin, label, pages, delay, bytes, links, workers, maxPages, siteImpl = 'node' }) {
+  const site = siteImpl === 'go'
+    ? await startGoSite(sbin, { pages, delay, bytes, links })
+    : await startSite({ pages, delay, bytes, links });
   try {
     const go = [];
     const ts = [];
@@ -87,14 +119,22 @@ async function crawlCase({ bin, label, pages, delay, bytes, links, workers, maxP
     const siteBound = workers > 1 && goScaling < workers * 0.6;
     // 速すぎる計測は信用しない(G-13 と同じ下限)
     const noisy = median(go) < MIN_BENCH_MS || median(ts) < MIN_BENCH_MS;
-    const comparable = sameResult && !siteBound && !noisy;
+    // **ばらつきが大きい系列も信用しない。** 同じ条件を 5 回回して最大が最小の 2 倍を超えるなら、
+    // 測っているのは実装ではなく機械の都合(他プロセス・発熱・省電力)である。
+    // 実測(2026-09-08): 同じ条件で 541ms と 5,368ms が出た。倍率はいくらでも作れてしまう
+    const swing = (xs) => Math.max(...xs) / Math.max(1, Math.min(...xs));
+    const unstable = swing(go) > 2 || swing(ts) > 2;
+    const comparable = sameResult && !siteBound && !noisy && !unstable;
     return {
       label,
+      siteImpl, // 合成サイトの実装(node は 1 スレッドなので遅延 0 では律速になりうる)
       params: { pages, delayMs: delay, bytes, links, workers, maxPages },
       comparable,
       sameResult,
       siteBound,
       noisy,
+      unstable, // 同じ条件の最大 / 最小が 2 倍を超えた(機械の都合を測っている)
+      swing: { go: Math.round(swing(go) * 100) / 100, ts: Math.round(swing(ts) * 100) / 100 },
       goScaling, // Workers=1 に対する Go の速度倍率。workers に近ければ本当に並行できている
       pages: { go: goOut.pages, ts: tsOut.pages },
       reason: { go: goOut.reason, ts: tsOut.reason },
@@ -115,18 +155,22 @@ const cases = [
   { label: '遅延 50ms・60 ページ・Workers 5', pages: 60, delay: 50, bytes: 4000, links: 8, workers: 5, maxPages: 60 },
   { label: '遅延 50ms・30 ページ・Workers 1', pages: 30, delay: 50, bytes: 4000, links: 8, workers: 1, maxPages: 30 },
   // 遅延なし: 待ちを取り除くと、残るのは取得の手続きと解析。
+  // **合成サイトは Go 製にする** —— Node 版(1 スレッド)は受け側が先に飽和し、
+  // クローラでなくサーバを測ることになる(2026-09-07 実測)。
   // 下限(500ms)を超えるだけの仕事を積むためページ数を増やす
-  { label: '遅延 0・400 ページ・Workers 5', pages: 400, delay: 0, bytes: 4000, links: 8, workers: 5, maxPages: 400 },
+  { label: '遅延 0・500 ページ・Workers 5(Go 製サイト)', pages: 500, delay: 0, bytes: 4000, links: 8, workers: 5, maxPages: 500, siteImpl: 'go' },
   // 大きい本文: 解析の比重を上げる
-  { label: '遅延 0・150 ページ・本文 60KB・Workers 5', pages: 150, delay: 0, bytes: 60000, links: 8, workers: 5, maxPages: 150 },
+  { label: '遅延 0・200 ページ・本文 60KB・Workers 5(Go 製サイト)', pages: 200, delay: 0, bytes: 60000, links: 8, workers: 5, maxPages: 200, siteImpl: 'go' },
+  // 対照: 同じ条件を Node 製サイトで。**サーバの実装が結論を変えることを示す**
+  { label: '遅延 0・500 ページ・Workers 5(Node 製サイト・対照)', pages: 500, delay: 0, bytes: 4000, links: 8, workers: 5, maxPages: 500, siteImpl: 'node' },
 ];
 
-const { bin, ubin } = await build();
+const { bin, ubin, sbin } = await build();
 
 const crawl = [];
 for (const c of cases) {
   process.stderr.write(`… ${c.label}\n`);
-  crawl.push(await crawlCase({ bin, ...c }));
+  crawl.push(await crawlCase({ bin, sbin, ...c }));
 }
 
 process.stderr.write('… URL 正規化\n');
@@ -159,12 +203,41 @@ const results = {
     msTs: median(urlTs),
     spreadMs: { go: spread(urlGo), ts: spread(urlTs) },
     ratio: Math.round((median(urlTs) / Math.max(1, median(urlGo))) * 100) / 100,
+    unstable: Math.max(...urlGo) / Math.max(1, Math.min(...urlGo)) > 2
+      || Math.max(...urlTs) / Math.max(1, Math.min(...urlTs)) > 2,
     // 同じ入力から同じ件数が出ていること。ここが崩れたら速さの比較は無意味
     okMatches: goU.ok === tsU.ok && goU.same === tsU.same,
     counts: { ok: goU.ok, same: goU.same },
     noisy: median(urlGo) < MIN_BENCH_MS || median(urlTs) < MIN_BENCH_MS,
   },
 };
+
+// **実行ごとの要約を追記する。** ばらつき判定は実行の内側しか見ないので、
+// 同じ条件が実行をまたいで違う答えを出すことは、履歴が無いと分からない
+// (実測: 遅延 0 の比が 0.96 → 3.55 → 2.07 と動いた)。
+const HISTORY = join(root, 'bench', 'history.jsonl');
+const summary = {
+  measuredAt: results.measuredAt,
+  reps: REPS,
+  crawl: crawl.map((c) => ({ label: c.label, ratio: c.ratio, comparable: c.comparable, goMs: c.wallMs.go, tsMs: c.wallMs.ts })),
+  urlRatio: results.urlNormalize.ratio,
+};
+appendFileSync(HISTORY, JSON.stringify(summary) + '\n', 'utf8');
+
+// 履歴から、同じラベルの比が実行をまたいでどれだけ動いたかを出す
+try {
+  const hist = readFileSync(HISTORY, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const byLabel = {};
+  for (const h of hist) {
+    for (const c of h.crawl) (byLabel[c.label] ??= []).push(c.ratio);
+  }
+  results.crossRun = {
+    runs: hist.length,
+    note: '同じ条件を別の実行で測ったときの比の範囲。**実行内のばらつきが小さくても、ここが広ければ再現していない**',
+    ratios: Object.fromEntries(Object.entries(byLabel).map(([k, v]) => [k, { n: v.length, min: Math.min(...v), max: Math.max(...v) }])),
+    urlRatios: hist.map((h) => h.urlRatio),
+  };
+} catch { /* 履歴が読めなければ出さない */ }
 
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify(results, null, 2) + '\n', 'utf8');

@@ -10,3 +10,4 @@ tests/ui/out/
 
 .vercel
 bench/out/
+bench/history.jsonl

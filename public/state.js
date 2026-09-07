@@ -273,6 +273,10 @@ export function langRows(data) {
     if (!c.sameResult) reasons.push('取得結果が食い違った');
     if (c.siteBound) reasons.push(`合成サイトが律速(Workers ${c.params.workers} で ${c.goScaling} 倍しか出ていない)`);
     if (c.noisy) reasons.push('計測が短すぎる(500ms 未満)');
+    if (c.unstable) {
+      const sw = c.swing ? `(最大 / 最小 = ${Math.max(c.swing.go, c.swing.ts)} 倍)` : '';
+      reasons.push(`同じ条件のばらつきが大きい${sw}`);
+    }
     return {
       label: c.label,
       goMs: c.wallMs.go,
@@ -285,6 +289,27 @@ export function langRows(data) {
       whyNot: reasons.join(' / '),
     };
   });
+}
+
+/**
+ * langCrossRun は「同じ条件を別の実行で測ったときに、比がどれだけ動いたか」を返す。
+ * **実行内のばらつきが小さくても、ここが広ければ再現していない。**
+ * 幅(max/min)が 1.2 倍を超える条件を「再現しなかった」として拾う。
+ */
+export function langCrossRun(data) {
+  const cr = data?.crossRun;
+  if (!cr || cr.runs < 2) return null;
+  const rows = Object.entries(cr.ratios).map(([label, v]) => ({
+    label, n: v.n, min: v.min, max: v.max,
+    width: v.min > 0 ? Math.round((v.max / v.min) * 100) / 100 : 0,
+  }));
+  return {
+    runs: cr.runs,
+    rows,
+    reproduced: rows.filter((r) => r.width <= 1.2),
+    notReproduced: rows.filter((r) => r.width > 1.2),
+    urlRatios: cr.urlRatios ?? [],
+  };
 }
 
 /** langVerdict は比較できた行だけから一文をまとめる。無ければ null。 */
