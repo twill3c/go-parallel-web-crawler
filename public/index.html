@@ -137,6 +137,21 @@
     <p class="hint" id="benchVerdict"></p>
   </section>
 
+  <section class="panel" id="langPanel" aria-labelledby="lang-h" hidden>
+    <h2 id="lang-h">Go vs TypeScript</h2>
+    <p class="hint">同じアルゴリズムの TypeScript 版を書いて、同じ合成サイトを同じ設定で巡回させた実測です。
+      <strong>この数を言語の一般的な速さとして読まないでください。</strong>測っているのは、この機械・この条件での、この 2 つの実装です。</p>
+    <div class="table-wrap">
+      <table class="bench" id="langTable">
+        <thead><tr><th>条件</th><th>Go</th><th>TypeScript</th><th>倍率</th><th>備考</th></tr></thead>
+        <tbody id="langBody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="langVerdict"></p>
+    <p class="hint" id="langUrl"></p>
+    <p class="hint" id="langConditions"></p>
+  </section>
+
   <section class="panel" aria-labelledby="errors-h">
     <h2 id="errors-h">Broken Links <span class="count" id="errCount">0</span></h2>
     <p class="hint">取れなかったページと、<strong>それを指しているページ</strong>。直すのは参照元の側です。</p>

@@ -43,6 +43,8 @@ AI コーディングエージェント向けの参照資料は次の四つ(原�
 ```bash
 go run .                                 # http://localhost:3000
 go test -race ./...                      # Go のテスト(ネットワークに出ない)
+node --test bench/equivalence.test.mjs   # Go 版と TS 版が同じ結果を返すことの検査(比較の前提)
+node bench/run.mjs --reps 5              # Go vs TypeScript を測り直す → public/bench-results.json
 node --test tests/ui/*.test.mjs          # 画面(reducer・ベンチ集計・実ブラウザ検品)
                                          # ※ ディレクトリ指定は Node 24.3 で落ちる。ファイルを渡す
                                          # ※ Playwright は PLAYWRIGHT_DIR(既定 ../hacchu-forge/node_modules/playwright)から借りる
@@ -81,6 +83,8 @@ internal/model       データモデルとイベント
 public/              画面(HTML / CSS / Vanilla JS、ビルド無し。state.js は Node のテストと共有)
 tests/               リポジトリ横断の検査(go.mod の依存・reducer・実ブラウザ)
 scripts/             本番の SSE 計測
+bench/               Go vs TypeScript の測定(TS 版クローラ・合成サイト・実行器)。**出荷物ではない**
+cmd/                 測定用の CLI(crawlbench / urlbench)。本番サーバは root の main.go
 ```
 
 ## 実測で分かったこと
@@ -92,6 +96,11 @@ scripts/             本番の SSE 計測
   イベント列には ms に丸めた `durationMs` しか無く、再計算は原理的に一致しなかった(HC-189)
 - **`hidden` 属性は `display` を持つ CSS に負ける。** 要素数・幾何・溢れの検査は全部緑のまま、
   スクリーンショットの目視でだけ見つかった(HC-193)
+- **待ち時間があるなら、言語の差はそこに埋もれる**(2026-09-07・ROADMAP G)。同じアルゴリズムの
+  TypeScript 版を書いて同じ合成サイトを巡回させると、応答 50ms のとき Go と TypeScript の差は
+  Workers 5 で 2%、Workers 1 で 5% だった。一方、待ち時間を含まない計算だけ(URL 正規化 20 万回)を
+  切り出すと 3.06 倍の差が出る。**遅延ゼロの条件は測れなかった** —— 合成サイトが 1 スレッドの Node で、
+  そちらが律速になったため(Go の Workers 5 が 1 に対して 2.7 倍しか出ない)。測れなかったことも表に残してある
 - **ベンチマークは速すぎると何も測れない。** ローカルの合成サイト(1 回 20〜50 ms)では
   Workers 1 が 444 pages/s、5 が 750、10 が 267 と単調ですらない値が出た。差は並行度ではなく
   往復のばらつきである。各行 500 ms 未満なら速度比も最速の印も出さず、手当てを書く(G-13)。

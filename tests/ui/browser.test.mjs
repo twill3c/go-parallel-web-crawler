@@ -356,6 +356,41 @@ test('T-907: 書誌情報の行が押すと開き、canonical の異同まで出
   await page.close();
 });
 
+// T-1011 / ROADMAP-G: 言語比較の節が実測ファイルから描かれ、成立しない行では倍率を出さない。
+test('T-1011: Go vs TypeScript の表が出て、成立しない行は理由を書く', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`${appUrl}/`);
+  await page.waitForFunction(() => {
+    const el = document.getElementById('langPanel');
+    return el && getComputedStyle(el).display !== 'none' && document.querySelectorAll('#langBody tr').length > 0;
+  }, null, { timeout: 15000 });
+  assert.deepEqual(errors, []);
+
+  const rows = await page.$$eval('#langBody tr', (els) => els.map((r) => ({
+    cells: [...r.children].map((c) => c.textContent.trim()),
+    pending: r.classList.contains('pending'),
+  })));
+  assert.ok(rows.length >= 2, `行が少ない: ${rows.length}`);
+  for (const r of rows) {
+    if (r.pending) {
+      assert.equal(r.cells[3], '—', `成立しない行に倍率が出ている: ${r.cells[0]}`);
+      assert.ok(r.cells[4].length > 3, `理由が空: ${r.cells[0]}`);
+    } else {
+      assert.match(r.cells[3], /^×[\d.]+$/, `倍率の形が違う: ${r.cells[3]}`);
+    }
+  }
+  // 前提の検算: 成立した行が少なくとも 1 つある(全滅なら表そのものが無意味)
+  assert.ok(rows.some((r) => !r.pending), '成立した行が無い');
+  // 注意書きと条件が必ず出ている
+  const panel = await page.$eval('#langPanel', (e) => e.textContent);
+  assert.match(panel, /言語の一般的な速さとして読まないでください/);
+  assert.match(panel, /測定条件:/);
+  await page.screenshot({ path: join(outDir, 'lang.png'), fullPage: true });
+  await page.close();
+});
+
 // T-726 / ROADMAP-A: 画面が robots.txt に既定で従い、状態と除外件数を出す。
 test('T-726: robots.txt に従い、状態と除外件数を画面に出す', async () => {
   robotsBody = 'User-agent: *\nDisallow: /p1\nAllow: /p10\n'; // /p1, /p11..p19 を拒否・/p10 は許可

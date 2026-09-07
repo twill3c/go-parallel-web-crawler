@@ -3,6 +3,7 @@ import {
   createSSEParser, initialState, reduce, liveStats, channelCounts, STATUS, WORKER,
   BENCH_WORKERS, benchRow, benchSummary, MIN_BENCH_MS,
   statusClass, STATUS_SYMBOL, brokenPages,
+  langRows, langVerdict,
 } from './state.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,6 +19,8 @@ const els = {
   errors: $('errors'), errCount: $('errCount'), pages: $('pages'),
   bench: $('bench'), benchPanel: $('benchPanel'), benchBody: $('benchBody'), benchNote: $('benchNote'), benchVerdict: $('benchVerdict'),
   robots: $('robots'), robotsHint: $('robotsHint'), robotsStatus: $('robotsStatus'), stRobots: $('stRobots'),
+  langPanel: $('langPanel'), langBody: $('langBody'), langVerdict: $('langVerdict'),
+  langUrl: $('langUrl'), langConditions: $('langConditions'),
 };
 
 let state = initialState();
@@ -253,6 +256,66 @@ function renderBench() {
     `Workers ${base.workers} → ${fast.workers} で ${s.speedup(fast)} 倍(${base.pagesPerSec} → ${fast.pagesPerSec} pages/s)。`
     + ' この数はネットワークと対象サイトの応答に左右されるので、言語や実装の一般的な性能とは読まないでください。';
 }
+
+// ---------- Go vs TypeScript(ROADMAP G)----------
+// 実測は手元で走らせて public/bench-results.json に書いてある(bench/run.mjs)。
+// ここでは読んで並べるだけ。**成立しなかった条件では倍率を出さず、理由を書く。**
+async function loadLangResults() {
+  let data;
+  try {
+    const res = await fetch('bench-results.json', { cache: 'no-cache' });
+    if (!res.ok) return;
+    data = await res.json();
+  } catch {
+    return; // 実測ファイルが無ければ節ごと出さない
+  }
+  const rows = langRows(data);
+  if (rows.length === 0) return;
+  els.langPanel.hidden = false;
+  els.langBody.textContent = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    if (!r.comparable) tr.className = 'pending';
+    const spread = (s) => (s ? ` (${s.min}–${s.max})` : '');
+    const cells = [
+      r.label,
+      `${r.goMs}ms${spread(r.goSpread)}`,
+      `${r.tsMs}ms${spread(r.tsSpread)}`,
+      r.comparable ? `×${r.ratio}` : '—',
+      r.comparable ? `${r.pages} ページ` : r.whyNot,
+    ];
+    for (let i = 0; i < cells.length; i++) {
+      const td = document.createElement('td');
+      td.textContent = cells[i];
+      if (i === 0 || i === 4) td.style.textAlign = 'left';
+      if (i === 4) td.style.whiteSpace = 'normal';
+      tr.appendChild(td);
+    }
+    els.langBody.appendChild(tr);
+  }
+
+  const v = langVerdict(data);
+  els.langVerdict.textContent = v
+    ? v.text
+    : 'この実測では比較が成立した条件がありませんでした(理由は各行の備考)。';
+
+  const u = data.urlNormalize;
+  if (u && u.okMatches && !u.noisy) {
+    els.langUrl.textContent =
+      `待ち時間を含まない計算だけ(URL 正規化と同一ドメイン判定を ${u.n.toLocaleString()} 回)を切り出すと、`
+      + `Go ${Math.round(u.msGo)}ms に対し TypeScript ${Math.round(u.msTs)}ms で ${u.ratio} 倍でした。`
+      + '両実装は同じ件数(' + u.counts.ok.toLocaleString() + ' 件)を返しています。'
+      + 'ここで差が出るのに全体では出ないのは、クロールの時間のほとんどが待ち時間だからです。';
+  } else {
+    els.langUrl.textContent = '';
+  }
+
+  const c = data.conditions;
+  els.langConditions.textContent =
+    `測定条件: ${c.machine} / ${c.os} / ${c.go} / ${c.node} / 各条件 ${c.reps} 回の中央値(括弧は最小–最大)。`
+    + `測定日 ${String(data.measuredAt).slice(0, 10)}。${c.note}`;
+}
+loadLangResults();
 
 // ---------- 描画 ----------
 function fmtMs(ms) { return `${Math.round(ms)}ms`; }

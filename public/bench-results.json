@@ -1,0 +1,315 @@
+{
+  "measuredAt": "2026-09-07T10:23:57.177Z",
+  "conditions": {
+    "machine": "11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz / 8 論理コア / RAM 34GB",
+    "os": "win32 10.0.26200",
+    "go": "go1.27.1 windows/amd64",
+    "node": "node 24.3.0",
+    "reps": 5,
+    "note": "合成サイトは同一プロセス(Node)で動かし、両実装が同じ相手を叩く。時間はプロセスの内側で測り、起動時間を含めない。代表値は中央値"
+  },
+  "crawl": [
+    {
+      "label": "遅延 50ms・60 ページ・Workers 5",
+      "params": {
+        "pages": 60,
+        "delayMs": 50,
+        "bytes": 4000,
+        "links": 8,
+        "workers": 5,
+        "maxPages": 60
+      },
+      "comparable": true,
+      "sameResult": true,
+      "siteBound": false,
+      "noisy": false,
+      "goScaling": 4.13,
+      "pages": {
+        "go": 60,
+        "ts": 60
+      },
+      "reason": {
+        "go": "max_pages",
+        "ts": "max_pages"
+      },
+      "wallMs": {
+        "go": 934,
+        "ts": 956,
+        "goW1": 3861
+      },
+      "spreadMs": {
+        "go": {
+          "min": 824,
+          "max": 1577
+        },
+        "ts": {
+          "min": 947,
+          "max": 1031
+        }
+      },
+      "wallAll": {
+        "go": [
+          934,
+          1577,
+          950,
+          861,
+          824
+        ],
+        "ts": [
+          951,
+          1031,
+          956,
+          947,
+          1007
+        ],
+        "goW1": [
+          3859,
+          4921,
+          4902,
+          3811,
+          3861
+        ]
+      },
+      "fetchMs": {
+        "go": 3680,
+        "ts": 3965
+      },
+      "parseMs": {
+        "ts": 19
+      },
+      "ratio": 1.02
+    },
+    {
+      "label": "遅延 50ms・30 ページ・Workers 1",
+      "params": {
+        "pages": 30,
+        "delayMs": 50,
+        "bytes": 4000,
+        "links": 8,
+        "workers": 1,
+        "maxPages": 30
+      },
+      "comparable": true,
+      "sameResult": true,
+      "siteBound": false,
+      "noisy": false,
+      "goScaling": 1,
+      "pages": {
+        "go": 30,
+        "ts": 30
+      },
+      "reason": {
+        "go": "max_pages",
+        "ts": "max_pages"
+      },
+      "wallMs": {
+        "go": 1873,
+        "ts": 1968,
+        "goW1": 1880
+      },
+      "spreadMs": {
+        "go": {
+          "min": 1848,
+          "max": 1917
+        },
+        "ts": {
+          "min": 1964,
+          "max": 2048
+        }
+      },
+      "wallAll": {
+        "go": [
+          1917,
+          1848,
+          1902,
+          1861,
+          1873
+        ],
+        "ts": [
+          2048,
+          1968,
+          1966,
+          1964,
+          1991
+        ],
+        "goW1": [
+          1880,
+          1853,
+          1985,
+          1848,
+          1884
+        ]
+      },
+      "fetchMs": {
+        "go": 1858,
+        "ts": 1971
+      },
+      "parseMs": {
+        "ts": 11
+      },
+      "ratio": 1.05
+    },
+    {
+      "label": "遅延 0・400 ページ・Workers 5",
+      "params": {
+        "pages": 400,
+        "delayMs": 0,
+        "bytes": 4000,
+        "links": 8,
+        "workers": 5,
+        "maxPages": 400
+      },
+      "comparable": false,
+      "sameResult": true,
+      "siteBound": true,
+      "noisy": true,
+      "goScaling": 2.72,
+      "pages": {
+        "go": 400,
+        "ts": 400
+      },
+      "reason": {
+        "go": "max_pages",
+        "ts": "max_pages"
+      },
+      "wallMs": {
+        "go": 431,
+        "ts": 1314,
+        "goW1": 1173
+      },
+      "spreadMs": {
+        "go": {
+          "min": 261,
+          "max": 510
+        },
+        "ts": {
+          "min": 1114,
+          "max": 1678
+        }
+      },
+      "wallAll": {
+        "go": [
+          261,
+          499,
+          510,
+          315,
+          431
+        ],
+        "ts": [
+          1341,
+          1678,
+          1114,
+          1192,
+          1314
+        ],
+        "goW1": [
+          1173,
+          1340,
+          692,
+          1365,
+          477
+        ]
+      },
+      "fetchMs": {
+        "go": 1398,
+        "ts": 5797
+      },
+      "parseMs": {
+        "ts": 102
+      },
+      "ratio": 3.05
+    },
+    {
+      "label": "遅延 0・150 ページ・本文 60KB・Workers 5",
+      "params": {
+        "pages": 150,
+        "delayMs": 0,
+        "bytes": 60000,
+        "links": 8,
+        "workers": 5,
+        "maxPages": 150
+      },
+      "comparable": false,
+      "sameResult": true,
+      "siteBound": true,
+      "noisy": true,
+      "goScaling": 1.52,
+      "pages": {
+        "go": 150,
+        "ts": 150
+      },
+      "reason": {
+        "go": "max_pages",
+        "ts": "max_pages"
+      },
+      "wallMs": {
+        "go": 253,
+        "ts": 674,
+        "goW1": 384
+      },
+      "spreadMs": {
+        "go": {
+          "min": 194,
+          "max": 871
+        },
+        "ts": {
+          "min": 554,
+          "max": 768
+        }
+      },
+      "wallAll": {
+        "go": [
+          871,
+          194,
+          253,
+          415,
+          229
+        ],
+        "ts": [
+          554,
+          674,
+          742,
+          768,
+          597
+        ],
+        "goW1": [
+          307,
+          399,
+          665,
+          384,
+          372
+        ]
+      },
+      "fetchMs": {
+        "go": 908,
+        "ts": 2424
+      },
+      "parseMs": {
+        "ts": 44
+      },
+      "ratio": 2.66
+    }
+  ],
+  "urlNormalize": {
+    "n": 200000,
+    "msGo": 1003.855,
+    "msTs": 3072.4,
+    "spreadMs": {
+      "go": {
+        "min": 888.903,
+        "max": 1524.951
+      },
+      "ts": {
+        "min": 2765.52,
+        "max": 3511.78
+      }
+    },
+    "ratio": 3.06,
+    "okMatches": true,
+    "counts": {
+      "ok": 200000,
+      "same": 120000
+    },
+    "noisy": false
+  }
+}

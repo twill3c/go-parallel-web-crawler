@@ -217,6 +217,55 @@ export function liveStats(state) {
   return { total, success, errors: total - success, durationMs, requestsPerSec, avgMs, p95Ms };
 }
 
+// ---------- Go と TypeScript の比較(ROADMAP G)----------
+
+/**
+ * langRows は bench-results.json を画面の行に畳む。
+ * **比較が成立していない行では倍率を出さない。** 出さない理由も一緒に返す(HC-079)。
+ * 成立の条件は三つ:
+ *   sameResult  両実装が同じページ数・同じ完了理由に達した
+ *   !siteBound  合成サイトが律速でない(Workers を増やした効きが出ている)
+ *   !noisy      どちらの中央値も 500ms 以上(速すぎる計測は機械のばらつきを測る)
+ */
+export function langRows(data) {
+  if (!data || !Array.isArray(data.crawl)) return [];
+  return data.crawl.map((c) => {
+    const reasons = [];
+    if (!c.sameResult) reasons.push('取得結果が食い違った');
+    if (c.siteBound) reasons.push(`合成サイトが律速(Workers ${c.params.workers} で ${c.goScaling} 倍しか出ていない)`);
+    if (c.noisy) reasons.push('計測が短すぎる(500ms 未満)');
+    return {
+      label: c.label,
+      goMs: c.wallMs.go,
+      tsMs: c.wallMs.ts,
+      goSpread: c.spreadMs?.go ?? null,
+      tsSpread: c.spreadMs?.ts ?? null,
+      pages: c.pages.go,
+      comparable: !!c.comparable,
+      ratio: c.comparable ? c.ratio : null,
+      whyNot: reasons.join(' / '),
+    };
+  });
+}
+
+/** langVerdict は比較できた行だけから一文をまとめる。無ければ null。 */
+export function langVerdict(data) {
+  const rows = langRows(data).filter((r) => r.comparable);
+  if (rows.length === 0) return null;
+  const ratios = rows.map((r) => r.ratio);
+  const lo = Math.min(...ratios);
+  const hi = Math.max(...ratios);
+  const pct = (x) => `${Math.round(Math.abs(x - 1) * 100)}%`;
+  return {
+    rows: rows.length,
+    lo,
+    hi,
+    text: hi <= 1.3
+      ? `ネットワーク待ちのあるクロールでは、両者の差は ${pct(lo)}〜${pct(hi)} に収まりました。待つ時間が支配的で、言語の差はそこに埋もれます。`
+      : `比較できた ${rows.length} 条件で、TypeScript 版は Go 版の ${lo}〜${hi} 倍の時間でした。`,
+  };
+}
+
 // ---------- ページの状態と参照元(ROADMAP D)----------
 
 /**
