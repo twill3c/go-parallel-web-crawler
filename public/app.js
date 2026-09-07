@@ -2,6 +2,7 @@
 import {
   createSSEParser, initialState, reduce, liveStats, channelCounts, STATUS, WORKER,
   BENCH_WORKERS, benchRow, benchSummary, MIN_BENCH_MS,
+  statusClass, STATUS_SYMBOL, brokenPages,
 } from './state.js';
 
 const $ = (id) => document.getElementById(id);
@@ -360,40 +361,113 @@ let renderedPages = 0;
 function renderPages() {
   if (state.pages.length < renderedPages) {
     els.pages.textContent = '';
-    els.errors.textContent = '';
     renderedPages = 0;
   }
   for (let i = renderedPages; i < state.pages.length; i++) {
     const p = state.pages[i];
+    const cls = statusClass(p.statusCode, p.error);
+    const sym = STATUS_SYMBOL[cls];
     const tr = document.createElement('tr');
-    if (p.error) tr.className = 'err';
+    tr.className = `st-${cls}`;
+    tr.dataset.status = cls;
+    if (p.error) tr.classList.add('err');
     const cells = [
-      ['num', String(i + 1)],
-      ['purl', pathOf(p.url)],
-      ['pstatus', p.statusCode ? String(p.statusCode) : '—'],
-      ['num ptime', fmtMs(p.durationMs)],
-      ['num', `W${String(p.workerId).padStart(2, '0')}`],
-      ['ptitle', p.error || p.title],
+      ['psym', sym.sym, sym.label],
+      ['num', String(i + 1), ''],
+      ['purl', pathOf(p.url), p.url],
+      ['pstatus', p.statusCode ? String(p.statusCode) : '—', ''],
+      ['num ptime', fmtMs(p.durationMs), ''],
+      ['num', `W${String(p.workerId).padStart(2, '0')}`, ''],
+      ['ptitle', p.error || p.title, p.title],
     ];
-    for (const [cls, text] of cells) {
+    for (const [cls2, text, title] of cells) {
       const td = document.createElement('td');
-      td.className = cls;
+      td.className = cls2;
       td.textContent = text;
-      if (cls === 'purl') td.title = p.url;
+      if (title) td.title = title;
       tr.appendChild(td);
     }
     els.pages.appendChild(tr);
-    if (p.error) {
-      const li = document.createElement('li');
-      li.innerHTML = '<span class="eurl"></span><span class="ekind"></span>';
-      li.children[0].textContent = pathOf(p.url);
-      li.children[0].title = p.url;
-      li.children[1].textContent = p.error;
-      els.errors.appendChild(li);
+    // 書誌情報の行(ROADMAP E)。押したときだけ開く
+    const detail = pageDetail(p);
+    if (detail) {
+      tr.classList.add('has-detail');
+      tr.tabIndex = 0;
+      const dtr = document.createElement('tr');
+      dtr.className = 'detail';
+      dtr.hidden = true;
+      const td = document.createElement('td');
+      td.colSpan = 7;
+      td.appendChild(detail);
+      dtr.appendChild(td);
+      els.pages.appendChild(dtr);
+      const toggle = () => { dtr.hidden = !dtr.hidden; };
+      tr.addEventListener('click', toggle);
+      tr.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+      });
     }
   }
   renderedPages = state.pages.length;
-  els.errCount.textContent = String(state.pages.filter((p) => p.error).length);
+  renderBroken();
+}
+
+// pageDetail は description / h1 / canonical / 転送先 を並べた小さな定義リストを作る。
+// 何も無ければ null(空の行を作らない)。
+function pageDetail(p) {
+  const rows = [];
+  if (p.h1) rows.push(['h1', p.h1]);
+  if (p.description) rows.push(['description', p.description]);
+  if (p.canonical) {
+    const differs = p.canonical !== p.url;
+    rows.push(['canonical', p.canonical + (differs ? '(この URL とは別)' : '(自分自身)')]);
+  }
+  if (p.finalUrl) rows.push(['転送先', p.finalUrl]);
+  if (rows.length === 0) return null;
+  const dl = document.createElement('dl');
+  dl.className = 'seo';
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = k;
+    const dd = document.createElement('dd');
+    dd.textContent = v;
+    dl.append(dt, dd);
+  }
+  return dl;
+}
+
+// renderBroken は壊れたページを参照元つきで並べる(ROADMAP D)。
+// 参照元は「どのページを直せばよいか」なので、URL と対で出す。
+function renderBroken() {
+  const broken = brokenPages(state);
+  els.errCount.textContent = String(broken.length);
+  els.errors.textContent = '';
+  for (const b of broken) {
+    const li = document.createElement('li');
+    li.className = `st-${b.class}`;
+    const head = document.createElement('div');
+    head.className = 'ehead';
+    const sym = document.createElement('span');
+    sym.className = 'esym';
+    sym.textContent = STATUS_SYMBOL[b.class].sym;
+    sym.title = STATUS_SYMBOL[b.class].label;
+    const url = document.createElement('span');
+    url.className = 'eurl';
+    url.textContent = pathOf(b.url);
+    url.title = b.url;
+    const kind = document.createElement('span');
+    kind.className = 'ekind';
+    kind.textContent = b.error || `HTTP ${b.statusCode}`;
+    head.append(sym, url, kind);
+    li.appendChild(head);
+    const from = document.createElement('div');
+    from.className = 'efrom';
+    from.textContent = b.from.length
+      ? `参照元: ${b.from.map(pathOf).join(' , ')}`
+      : '参照元: 開始 URL(誰も指していません)';
+    li.appendChild(from);
+    els.errors.appendChild(li);
+  }
 }
 
 // ---------- グラフ(自前の力学レイアウト・SVG)----------

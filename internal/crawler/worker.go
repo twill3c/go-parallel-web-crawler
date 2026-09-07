@@ -50,6 +50,7 @@ func worker(ctx context.Context, id int, jobs <-chan string, results chan<- resu
 		events <- model.Event{
 			Type: model.EvPageCompleted, T: clock(), WorkerID: id, URL: u,
 			StatusCode: page.StatusCode, DurationMs: page.DurationMs, Title: page.Title, Error: page.Error,
+			Description: page.Description, H1: page.H1, Canonical: page.Canonical, FinalURL: page.FinalURL,
 		}
 		results <- result{page: page, links: links}
 	}

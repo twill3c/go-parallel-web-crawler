@@ -138,6 +138,10 @@ export function reduce(state, e) {
         title: e.title || '',
         error: e.error || '',
         workerId: e.workerId || 0,
+        description: e.description || '',
+        h1: e.h1 || '',
+        canonical: e.canonical || '',
+        finalUrl: e.finalUrl || '',
       };
       state.pages.push(page);
       w.pages += 1;
@@ -211,6 +215,55 @@ export function liveStats(state) {
   const p95Ms = total ? durs[Math.ceil(0.95 * total) - 1] : 0;
   const requestsPerSec = durationMs > 0 ? Math.round((total / (durationMs / 1000)) * 10) / 10 : 0;
   return { total, success, errors: total - success, durationMs, requestsPerSec, avgMs, p95Ms };
+}
+
+// ---------- ページの状態と参照元(ROADMAP D)----------
+
+/**
+ * statusClass は HTTP 状態とエラー種別から画面の区分を返す(Go 側の StatusClass と同じ規則)。
+ * 色に頼らず記号と文字でも読めるようにするため、区分名を返して見せ方は呼び手に任せる。
+ */
+export function statusClass(statusCode, error) {
+  switch (error) {
+    case 'Timeout': case 'DNS Error': case 'Connection Error':
+    case 'Too Many Redirects': case 'Redirect off-domain': case 'Forbidden':
+      return 'failed';
+    default: break;
+  }
+  if (statusCode >= 200 && statusCode < 300 && !error) return 'ok';
+  if (statusCode >= 300 && statusCode < 400) return 'redirect';
+  if (statusCode >= 400 && statusCode < 500) return 'missing';
+  if (statusCode >= 500) return 'server';
+  return 'other';
+}
+
+/** 区分ごとの記号と読み。色が見えなくても区別できる(原本 §17 の流儀) */
+export const STATUS_SYMBOL = {
+  ok: { sym: '✓', label: 'OK' },
+  redirect: { sym: '→', label: '転送' },
+  missing: { sym: '✕', label: '不在' },
+  server: { sym: '!', label: '障害' },
+  failed: { sym: '✕', label: '到達せず' },
+  other: { sym: '·', label: 'その他' },
+};
+
+/**
+ * referrers は「その URL を指しているページ」を辺の集合から逆引きする(ROADMAP D)。
+ * リンク切れを直すのは参照元の側なので、壊れた URL には必ずこれを添える。
+ */
+export function referrers(state, url) {
+  const out = [];
+  for (const l of state.links) {
+    if (l.to === url && !out.includes(l.from)) out.push(l.from);
+  }
+  return out;
+}
+
+/** brokenPages は取得できなかった・見つからなかったページを、参照元つきで返す */
+export function brokenPages(state) {
+  return state.pages
+    .filter((p) => ['missing', 'server', 'failed'].includes(statusClass(p.statusCode, p.error)))
+    .map((p) => ({ ...p, class: statusClass(p.statusCode, p.error), from: referrers(state, p.url) }));
 }
 
 // ---------- ベンチマーク(F-38 / 原本 §21)----------

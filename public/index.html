@@ -138,15 +138,17 @@
   </section>
 
   <section class="panel" aria-labelledby="errors-h">
-    <h2 id="errors-h">Errors <span class="count" id="errCount">0</span></h2>
+    <h2 id="errors-h">Broken Links <span class="count" id="errCount">0</span></h2>
+    <p class="hint">取れなかったページと、<strong>それを指しているページ</strong>。直すのは参照元の側です。</p>
     <ul id="errors" class="errors"></ul>
   </section>
 
   <section class="panel" aria-labelledby="pages-h">
     <h2 id="pages-h">Page Results</h2>
+    <p class="hint">✓ OK ・ → 転送 ・ ✕ 不在 / 到達せず ・ ! 障害 ・ · その他。行を押すと description / h1 / canonical が出ます。</p>
     <div class="table-wrap">
       <table class="pages" id="pagesTable">
-        <thead><tr><th>#</th><th>URL</th><th>Status</th><th>Time</th><th>Worker</th><th>Title / Error</th></tr></thead>
+        <thead><tr><th></th><th>#</th><th>URL</th><th>Status</th><th>Time</th><th>Worker</th><th>Title / Error</th></tr></thead>
         <tbody id="pages"></tbody>
       </table>
     </div>

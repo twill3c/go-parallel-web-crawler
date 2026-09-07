@@ -56,7 +56,12 @@ function startSite() {
         }
         const m = /^\/p(\d+)/.exec(req.url);
         const i = m ? Number(m[1]) : 0;
-        res.end(`<title>Page ${i}</title><a href="/${q}">home</a><a href="/p${(i % n) + 1}${q}">next</a>`);
+        // 書誌情報(ROADMAP E)も返す。canonical はクエリを落とした形にして「自分と違う」場合を作る
+        res.end(`<title>Page ${i}</title>`
+          + `<meta name="description" content="ページ ${i} の説明">`
+          + `<link rel="canonical" href="/p${i}">`
+          + `<h1>見出し ${i}</h1>`
+          + `<a href="/${q}">home</a><a href="/p${(i % n) + 1}${q}">next</a>`);
       };
       if (delay) setTimeout(body, delay); else body();
     });
@@ -153,7 +158,8 @@ test('T-402: 合成サイトをクロールし、Worker 行・ノード・幾何
 
   // 取得済みノード数 = ページ表の行数 = 統計 Pages(= maxPages: 到達可能 26 > 20)
   const pagesText = Number(await page.$eval('#stPages', (e) => e.textContent));
-  const rows = await page.$$eval('#pages tr', (els) => els.length);
+  // 詳細行(tr.detail)は数えない —— 1 ページにつき本体 1 行 + 任意で詳細 1 行
+  const rows = await page.$$eval('#pages tr:not(.detail)', (els) => els.length);
   const fetchedNodes = await page.$$eval('#graph circle.node.fetched, #graph circle.node.error', (els) => els.length);
   const allNodes = await page.$$eval('#graph circle.node', (els) => els.length);
   assert.equal(pagesText, 20);
@@ -174,6 +180,13 @@ test('T-402: 合成サイトをクロールし、Worker 行・ノード・幾何
   const errText = await page.$eval('#errors', (e) => e.textContent);
   assert.match(errText, /\/p7/);
   assert.match(errText, /HTTP 404/);
+  // ROADMAP D: 壊れたページには参照元が付く(/p7 を指しているのは / と隣のページ)
+  assert.match(errText, /参照元: .*\//);
+  // 状態の記号が全行に付き、200 の行は ✓
+  const syms = await page.$$eval('#pages tr:not(.detail) td.psym', (els) => els.map((e) => e.textContent));
+  assert.equal(syms.length, 20);
+  assert.equal(syms.filter((s) => s === '✓').length, 19);
+  assert.equal(syms.filter((s) => s === '✕').length, 1);
   const pageUrls = await page.$$eval('#pages td.purl', (els) => els.map((e) => e.title));
   assert.ok(!pageUrls.some((u) => u.endsWith('/img.png')), 'img.png が取得されている');
 
@@ -308,6 +321,38 @@ test('T-602b: 確認をキャンセルするとベンチは走らない', async 
   await page.waitForTimeout(600);
   assert.equal(await page.$eval('#benchPanel', (e) => getComputedStyle(e).display), 'none');
   assert.equal(await page.$eval('#status', (e) => e.dataset.status), 'idle');
+  await page.close();
+});
+
+// T-907 / ROADMAP-E: ページ行を押すと description / h1 / canonical が開く。
+test('T-907: 書誌情報の行が押すと開き、canonical の異同まで出る', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto(`${appUrl}/`);
+  await runCrawl(page, { url: `${siteUrl}/`, workers: 2, maxPages: 6, delay: 0 });
+  await page.waitForFunction(() => document.getElementById('status').dataset.status === 'completed', null, { timeout: 30000 });
+
+  // 詳細行は初期状態で閉じている(hidden が効いていること — HC-193)
+  const hiddenAtRest = await page.$$eval('#pages tr.detail', (els) => els.map((e) => getComputedStyle(e).display));
+  assert.ok(hiddenAtRest.length > 0, '詳細行が 1 つも作られていない');
+  assert.ok(hiddenAtRest.every((d) => d === 'none'), '詳細行が最初から開いている');
+
+  // /p 系の行を押す(開始 URL の行には h1 が無いので、2 行目以降を選ぶ)
+  const target = await page.evaluateHandle(() => {
+    const rows = [...document.querySelectorAll('#pages tr.has-detail')];
+    return rows.find((r) => r.querySelector('td.purl').title.includes('/p')) || rows[0];
+  });
+  await target.asElement().scrollIntoViewIfNeeded();
+  await target.asElement().click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#pages tr.detail')]
+    .some((e) => getComputedStyle(e).display !== 'none'), null, { timeout: 5000 });
+
+  const open = await page.$$eval('#pages tr.detail', (els) => els
+    .filter((e) => getComputedStyle(e).display !== 'none')
+    .map((e) => e.textContent));
+  assert.equal(open.length, 1, '押した行の詳細だけが開く');
+  assert.match(open[0], /見出し/);
+  assert.match(open[0], /の説明/);
+  assert.match(open[0], /canonical/);
   await page.close();
 });
 

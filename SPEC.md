@@ -32,6 +32,7 @@ context / sync.Mutex が実際のクロールでどう動いているか**をブ
 | F-09 | STOP で `context` をキャンセルし、全 Worker が停止する | must | §13 |
 | F-10 | Max Pages に達したらそれ以上取得しない(取得数 ≤ Max Pages) | must | §4 |
 | F-11 | 各ページの status / 所要時間 / title / エラー種別を記録する | must | §10, §22 |
+| F-11b | あわせて**書誌情報**(`description` / 最初の `h1` / `canonical`)と、リダイレクトを追った場合の**最終 URL** を記録する。`canonical` は絶対化・正規化して、その URL 自身との異同が言える形にする(L9 実装) | could | §34 E |
 | F-12 | 統計: Pages / Success / Errors / Elapsed / Requests/sec / 平均 / P95 を出す | must | §20 |
 | F-13 | Worker の状態遷移 waiting → crawling → (error →) waiting → completed を追跡し、イベントで通知する | must | §11, §17 |
 | F-14 | 各 Worker はリクエストごとに Request Delay だけ待つ(ctx で中断可) | must | §4 |
@@ -94,7 +95,8 @@ UI は STOP で「`/stop` を呼ぶ **かつ** fetch を abort する」の二�
 | F-30 | 入力欄: Target URL / Workers(スライダ)/ Max Pages(スライダ)/ Request Delay / START / STOP | must | §5 |
 | F-31 | Worker 表示: ID・状態(色だけでなく記号と文字で識別)・現在の URL | must | §17 |
 | F-32 | 統計表示: Pages / Success / Errors / Elapsed / Requests/sec / Avg / P95 | must | §20 |
-| F-33 | ページ一覧: URL(パス表示)/ Status / Time。エラーは種別つきで別枠にも出す | must | §5, §22 |
+| F-33 | ページ一覧: URL(パス表示)/ Status / Time。各行に**状態の記号**(✓ OK / → 転送 / ✕ 不在・到達せず / ! 障害 / · その他)を付ける。行を押すと F-11b の書誌情報が開く | must | §5, §22, §34 D/E |
+| F-33b | **リンク切れの一覧**: 取れなかったページを、**それを指しているページ(参照元)**と対で出す。直すのは参照元の側なので、URL だけでは足りない(L9 実装) | could | §34 D |
 | F-34 | リンクグラフ: SVG。ノード=ページ、エッジ=リンク。取得済み/未取得を区別 | must | §16 |
 | F-35 | 「自分が管理するサイト、またはクロールが許可されているサイトで利用してください」を常時表示 | must | §4 |
 | F-36 | SSE は `fetch` + `ReadableStream` で受ける(POST なので `EventSource` は使えない)。**一括到着でも同じ結果になる**(§7 D-02) | must | §18 |
@@ -130,6 +132,7 @@ UI は STOP で「`/stop` を呼ぶ **かつ** fetch を abort する」の二�
 | G-11 | 本番: `GET /api/health` が 200、`POST /api/crawl` の**最初のイベント到着が完了より先**(=ストリーミングが効いている)を測る。効かなければ D-02 の見込みを実測で上書きする | 本番 URL への実リクエスト(`scripts/probe_stream.mjs`) | 実測 2026-09-07: 320 ms → 2,318 ms(D-02) |
 | G-12 | 同一 URL の重複エッジは出さない(`link_found` の (from,to) は一意) | イベント列の集合 | L2 |
 | G-13 | ベンチマークの速度比は、**全行が同じページ数を取れたときだけ**出す。揃わなければ数を出さず理由を書く(HC-079: 裏づけの無い数を表に出さない) | `benchSummary().comparable` の単体検査と実ブラウザ | L6 |
+| G-15 | 状態の区分(`ok` / `redirect` / `missing` / `server` / `failed` / `other`)は Go 側と画面側で**同じ表**を返す。どちらかを直せばもう一方のテストが落ちる | 同じ 11 行の表を両言語のテストに置く | L9 |
 | G-14 | robots.txt の判定は RFC 9309 の規範に一致する。群の選択・最長一致・同長時の Allow 優先・`*`/`$`・percent-encoding・状態ごとの分岐(2xx/4xx/5xx)をそれぞれ検査し、**陽性対照(`Disallow: /` が実際に撃つ)と、除外が 0 件なら落とす検査**を対で置く | 表駆動 + httptest + 実ブラウザ | L7 |
 
 ## 5. データモデルとイベント
@@ -158,7 +161,7 @@ type Statistics struct {
 |---|---|
 | `crawl_started` | `{crawlId, url(正規化後), workers, maxPages, requestDelayMs, startedAt, robots, crawlDelayMs}`。`robots` は `obeyed` / `absent` / `unreachable` / `ignored`(F-17) |
 | `worker_started` | `{workerId, url, t}`(t = 開始からの ms) |
-| `page_completed` | `{workerId, url, statusCode, durationMs, title, error?, t}` |
+| `page_completed` | `{workerId, url, statusCode, durationMs, title, error?, description?, h1?, canonical?, finalUrl?, t}` |
 | `link_found` | `{from, to, queued, t}`(同一ドメインの**一意な辺**すべて。`queued` が true なら `to` がこのとき URLSet に入りキューへ送られた。既知の URL・上限で入らなかった URL への辺は false。**辺の集合は結果の `links` と一致し**、画面はこれでリンク構造(閉路・上限で切られた先)を描く — L4 で改訂) |
 | `worker_done` | `{workerId, pages, t}`(goroutine が抜けた) |
 | `crawl_completed` | `{reason: "exhausted" \| "max_pages" \| "cancelled" \| "deadline" \| "robots", statistics, robotsBlocked, t}` |

@@ -35,6 +35,8 @@ AI コーディングエージェント向けの参照資料は次の四つ(原�
 | concurrent processing | 応答を遅らせた合成サイトで、同時接続数の最大 = Workers を実測(T-203) |
 | performance measurement | Elapsed / Requests/sec / Avg / P95。イベント列から再計算して一致(G-08) |
 | Worker Pool の効き方 | BENCHMARK ボタン。Workers 1/2/5/10 を順に走らせて Pages/s を並べる。**速すぎる計測では数を出さない**(下限 500ms)|
+| HTML の走り読み | 同じトークナイザ走査で description / h1 / canonical を拾う。行を押すと開く |
+| リンク切れの直し方 | 取れなかったページに**参照元**を添える。直すのは参照元の側 |
 
 ## 動かす
 

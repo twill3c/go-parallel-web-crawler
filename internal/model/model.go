@@ -9,6 +9,12 @@ type Page struct {
 	Title      string `json:"title"`
 	Error      string `json:"error,omitempty"`
 	WorkerID   int    `json:"workerId"`
+	// 書誌情報(ROADMAP E)。無ければ空
+	Description string `json:"description,omitempty"`
+	H1          string `json:"h1,omitempty"`
+	Canonical   string `json:"canonical,omitempty"`
+	// FinalURL はリダイレクトを追った結果の URL(URL と同じなら空)
+	FinalURL string `json:"finalUrl,omitempty"`
 }
 
 // エラー種別(SPEC §5 / 原本 §22)。画面はこの文字列をそのまま出す。
@@ -72,13 +78,17 @@ type Event struct {
 	CrawlDelayMs   int    `json:"crawlDelayMs,omitempty"` // robots.txt の Crawl-delay(あれば)
 
 	// worker_started / page_completed / worker_done
-	WorkerID   int    `json:"workerId,omitempty"`
-	URL        string `json:"url,omitempty"`
-	StatusCode int    `json:"statusCode,omitempty"`
-	DurationMs int64  `json:"durationMs,omitempty"`
-	Title      string `json:"title,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Pages      int    `json:"pages,omitempty"`
+	WorkerID    int    `json:"workerId,omitempty"`
+	URL         string `json:"url,omitempty"`
+	StatusCode  int    `json:"statusCode,omitempty"`
+	DurationMs  int64  `json:"durationMs,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Pages       int    `json:"pages,omitempty"`
+	Description string `json:"description,omitempty"`
+	H1          string `json:"h1,omitempty"`
+	Canonical   string `json:"canonical,omitempty"`
+	FinalURL    string `json:"finalUrl,omitempty"`
 
 	// link_found
 	From   string `json:"from,omitempty"`

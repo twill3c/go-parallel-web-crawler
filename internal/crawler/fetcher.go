@@ -121,13 +121,20 @@ func (f *Fetcher) Fetch(ctx context.Context, pageURL string) (model.Page, []stri
 	if resp.Request != nil && resp.Request.URL != nil {
 		base = resp.Request.URL.String()
 	}
-	links, title := ExtractLinks(base, io.LimitReader(resp.Body, MaxBodyBytes))
+	links, meta := ExtractPage(base, io.LimitReader(resp.Body, MaxBodyBytes))
 	finish()
 	if ctx.Err() != nil { // 本文読取の途中で止められた
 		page.Error = model.ErrCancelled
 		return page, nil
 	}
-	page.Title = title
+	page.Title = meta.Title
+	page.Description = meta.Description
+	page.H1 = meta.H1
+	page.Canonical = meta.Canonical
+	// 追跡の結果 URL が変わったなら残す(ROADMAP D: 転送されたことを画面に出す)
+	if n, err := Normalize(base); err == nil && n != pageURL {
+		page.FinalURL = n
+	}
 	return page, links
 }
 

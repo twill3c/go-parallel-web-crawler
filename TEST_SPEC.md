@@ -129,6 +129,18 @@
 | T-727 | F-18 | 実ブラウザ: チェックを外す | 拒否されたページも取る・「従わない設定」と出る |
 | T-728 | F-17 | 実ブラウザ: `Disallow: /` | 0 ページ・理由に「robots.txt がこのクロールを許していない」 |
 
+### L9(リンク切れと書誌情報)
+
+| ID | 対応要求 | ケース | 期待 |
+|---|---|---|---|
+| T-901 | F-11b | `ExtractPage` が title / description / h1 / canonical を拾う | 空白は畳む・最初の h1 だけ・`og:description` は使わない・canonical は絶対化して正規化 |
+| T-902 | F-11b | 何も無い文書・入れ子の h1 | すべて空 / `前中後` |
+| T-903 | F-11b | canonical と自 URL の異同(5 通り) | 正規化して比べれば「自分自身か」が言える |
+| T-904 | F-33, G-15 | `StatusClass` の 11 行の表 | ok / redirect / missing / server / failed / other |
+| T-905 | F-33b | 参照元の逆引き | 壊れた URL を指すページを漏れなく・誰も指していない URL には付かない |
+| T-906 | F-33, F-33b, G-15 | 画面側の `statusClass` / `STATUS_SYMBOL` / `referrers` / `brokenPages` | **T-904 と同じ表**を使う(片方だけ直すと落ちる)・記号と読みが全区分にある |
+| T-907 | F-11b, G-10 | 実ブラウザ: 詳細行 | 初期状態で閉じている(computed display が none)・押すと 1 行だけ開き h1 / description / canonical が出る |
+
 ### L5(本番)
 
 | ID | 対応要求 | ケース | 期待 |

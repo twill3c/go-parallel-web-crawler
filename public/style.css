@@ -120,13 +120,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .stats dt { color: var(--muted); font-size: .8rem; }
 .stats dd { margin: 0; font-family: var(--mono); font-size: 1.4rem; font-weight: 700; }
 
-/* errors */
+/* broken links */
 .count { font-family: var(--mono); color: var(--err); margin-left: 6px; }
-.errors { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-family: var(--mono); font-size: .9rem; }
-.errors li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+.errors { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-family: var(--mono); font-size: .9rem; }
+.errors li { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; }
+.errors .ehead { display: grid; grid-template-columns: 1.2em minmax(0, 1fr) auto; gap: 10px; align-items: baseline; }
+.errors .esym { font-weight: 700; text-align: center; }
 .errors .eurl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.errors .ekind { color: var(--err); white-space: nowrap; }
-.errors:empty::before { content: "エラーはありません"; color: var(--muted); font-family: var(--sans); }
+.errors .ekind { white-space: nowrap; }
+.errors .efrom { color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
+.errors li.st-missing .esym, .errors li.st-missing .ekind { color: var(--err); }
+.errors li.st-server .esym, .errors li.st-server .ekind { color: var(--warn); }
+.errors li.st-failed .esym, .errors li.st-failed .ekind { color: var(--pending); }
+.errors:empty::before { content: "リンク切れはありません"; color: var(--muted); font-family: var(--sans); }
 
 /* pages */
 .table-wrap { overflow-x: auto; }
@@ -136,6 +142,19 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pages td.ptitle { max-width: 36ch; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-family: var(--sans); }
 .pages tr.err td.pstatus, .pages tr.err td.ptitle { color: var(--err); }
 .pages td.num { text-align: right; }
+.pages td.psym { text-align: center; font-weight: 700; width: 1.6em; }
+.pages tr.st-ok td.psym { color: var(--ok); }
+.pages tr.st-redirect td.psym { color: var(--go); }
+.pages tr.st-missing td.psym, .pages tr.st-failed td.psym { color: var(--err); }
+.pages tr.st-server td.psym { color: var(--warn); }
+.pages tr.st-other td.psym { color: var(--pending); }
+.pages tr.has-detail { cursor: pointer; }
+.pages tr.has-detail:hover td, .pages tr.has-detail:focus-visible td { background: var(--panel-2); }
+.pages tr.detail[hidden] { display: none; } /* display を持つ規則に [hidden] が負けないよう明示(HC-193) */
+.pages tr.detail td { white-space: normal; background: var(--panel-2); }
+.seo { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 0; font-family: var(--sans); font-size: .88rem; }
+.seo dt { color: var(--muted); font-family: var(--mono); font-size: .82rem; }
+.seo dd { margin: 0; overflow-wrap: anywhere; }
 
 /* benchmark */
 #benchPanel[hidden] { display: none; } /* display を持つ規則に [hidden] が負けないよう明示(HC-190) */
