@@ -89,6 +89,15 @@ bench/               Go vs TypeScript の測定(TS 版クローラ・合成サ�
 cmd/                 測定用の CLI(crawlbench / urlbench)。本番サーバは root の main.go
 ```
 
+## 本番で通した記録(2026-09-08)
+
+| 対象 | 結果 |
+|---|---|
+| go.dev(6 ページ) | robots `obeyed` / sitemap `absent`(実際に 404)/ 外部リンク 212 件(pkg.go.dev 29・github.com 26・stackoverflow.com 12)/ 書誌情報 5 ページ |
+| senoto-mori(8 ページ) | robots `obeyed` / sitemap `used`(24 URL が挙がっていた)/ エラー 0 |
+
+外部リンクは**数えただけで辿っていません**。同一ドメイン制限は変わりません。
+
 ## 実測で分かったこと
 
 - **Vercel の Go Framework Preset で SSE は逐次届く**(2026-09-07)。旧来の `api/*.go` 方式は
